@@ -164,7 +164,7 @@ impl<T: ?Sized> Mutex<T> {
     fn unlock(&self) {
         let mut mtx_data = self.inner.mutex.lock().expect("sync::Mutex::lock");
         assert!(mtx_data.owned);
-        if let Some(tx) = mtx_data.waiters.pop_back() {
+        if let Some(tx) = mtx_data.waiters.pop_front() {
             // Send ownership to the waiter
             tx.send(()).expect("Sender::send");
         } else {
