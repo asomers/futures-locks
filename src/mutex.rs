@@ -8,8 +8,8 @@ use std::collections::VecDeque;
 use std::ops::{Deref, DerefMut};
 use std::sync;
 
-/// An RAII mutex guard, much like `std::sync::mutex`.  The wrapped data can be
-/// accessed via its `Deref` and `DerefMut` implementations.
+/// An RAII mutex guard, much like `std::sync::MutexGuard`.  The wrapped data
+/// can be accessed via its `Deref` and `DerefMut` implementations.
 pub struct MutexGuard<T: ?Sized> {
     mutex: Mutex<T>
 }
@@ -74,7 +74,7 @@ impl<T> Future for MutexFut<T> {
 #[derive(Debug)]
 struct MutexData {
     owned: bool,
-    // Could be a priority queue instead
+    // FIFO queue of waiting tasks.
     waiters: VecDeque<oneshot::Sender<()>>,
 }
 
@@ -132,9 +132,7 @@ impl<T> Mutex<T> {
         };
         Mutex { inner: sync::Arc::new(inner)}
     }
-}
 
-impl<T> Mutex<T> {
     /// Consumes the `Mutex` and returns the wrapped data.  If the `Mutex` still
     /// has multiple references (not necessarily locked), returns a copy of
     /// `self` instead.
