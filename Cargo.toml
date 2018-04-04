@@ -9,6 +9,10 @@ description = """
 Futures-aware lock primitives
 """
 categories = ["asynchronous"]
+exclude = [
+	".gitignore",
+	".travis.yml"
+]
 
 [dependencies]
 futures = "0.1"

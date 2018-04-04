@@ -4,6 +4,8 @@ A library of [Futures]-aware locking primitives.  These locks can safely be used
 in asynchronous environments like [Tokio].  When they block, they'll only block
 a single task, not the entire reactor.
 
+[![Build Status](https://travis-ci.org/asomers/futures-locks.svg?branch=master)](https://travis-ci.org/asomers/futures-locks)
+
 [Futures]: https://github.com/rust-lang-nursery/futures-rs
 [Tokio]: https:/tokio.rs
 
