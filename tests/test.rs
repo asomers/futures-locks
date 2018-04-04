@@ -34,9 +34,9 @@ fn mutex_lock_contested() {
         let task0 = mutex.lock()
             .and_then(move |mut guard| {
                 *guard += 5;
-                rx
-            }).map_err(|_| ());
-        let task1 = mutex.lock().map(|guard| *guard).map_err(|_| ());
+                rx.map_err(|_| ())
+            });
+        let task1 = mutex.lock().map(|guard| *guard);
         let task2 = lazy(move || {
             tx.send(()).unwrap();
             future::ok::<(), ()>(())
@@ -58,16 +58,16 @@ fn mutex_lock_multithreaded() {
 
     let parent = lazy(move || {
         tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
-            mtx_clone0.lock().map(|mut guard| { *guard += 2 }).map_err(|_| ())
+            mtx_clone0.lock().map(|mut guard| { *guard += 2 })
         }));
         tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
-            mtx_clone1.lock().map(|mut guard| { *guard += 3 }).map_err(|_| ())
+            mtx_clone1.lock().map(|mut guard| { *guard += 3 })
         }));
         tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
-            mtx_clone2.lock().map(|mut guard| { *guard += 5 }).map_err(|_| ())
+            mtx_clone2.lock().map(|mut guard| { *guard += 5 })
         }));
         tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
-            mtx_clone3.lock().map(|mut guard| { *guard += 7 }).map_err(|_| ())
+            mtx_clone3.lock().map(|mut guard| { *guard += 7 })
         }));
         future::ok::<(), ()>(())
     });

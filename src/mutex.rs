@@ -1,7 +1,6 @@
 // vim: tw=80
 
 use futures::{Async, Future, Poll};
-use futures::sync::oneshot::Canceled;
 use futures::sync::oneshot;
 use std::cell::UnsafeCell;
 use std::clone::Clone;
@@ -49,7 +48,7 @@ impl<T: ?Sized> DerefMut for MutexGuard<T> {
 
 impl<T> Future for MutexFut<T> {
     type Item = MutexGuard<T>;
-    type Error = Canceled;
+    type Error = ();
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         if self.receiver.is_none() {
@@ -58,7 +57,8 @@ impl<T> Future for MutexFut<T> {
             loop {
                 match self.receiver.poll() {
                     Ok(Async::NotReady) => return Ok(Async::NotReady),
-                    Err(e) => return Err(e),
+                    Err(e) => panic!(
+                        "receiver.poll returned unanticipated error {:?}", e),
                     Ok(Async::Ready(_)) => {
                         match self.mutex.poll_lock() {
                             Ok(guard) => return Ok(Async::Ready(guard)),
@@ -90,7 +90,8 @@ struct Inner<T: ?Sized> {
 /// because a mutex acquisition can block an entire reactor.  This class can be
 /// used instead.  It functions much like `std::sync::Mutex`.  Unlike that
 /// class, it also has a builtin `Arc`, making it accessible from multiple
-/// threads.  It's also safe to `clone`.
+/// threads.  It's also safe to `clone`.  Also unlike `std::sync::Mutex`, this
+/// class does not detect lock poisoning.
 ///
 /// # Examples
 ///
