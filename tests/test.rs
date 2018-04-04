@@ -75,3 +75,151 @@ fn mutex_lock_multithreaded() {
     tokio::run(parent);
     assert_eq!(mutex.try_unwrap().expect("try_unwrap"), 17_000);
 }
+
+// Acquire an RwLock nonexclusively by two different tasks simultaneously .
+#[test]
+fn rwlock_read_shared() {
+    let rwlock = RwLock::<u32>::new(42);
+
+    let result = current_thread::block_on_all(lazy(|| {
+        let (tx0, rx0) = oneshot::channel::<()>();
+        let (tx1, rx1) = oneshot::channel::<()>();
+        let task0 = rwlock.read()
+            .and_then(move |guard| {
+                tx1.send(()).unwrap();
+                rx0.map(move |_| *guard).map_err(|_| ())
+            });
+        let task1 = rwlock.read()
+            .and_then(move |guard| {
+                tx0.send(()).unwrap();
+                rx1.map(move |_| *guard).map_err(|_| ())
+            });
+        task0.join(task1)
+    }));
+
+    assert_eq!(result, Ok((42, 42)));
+}
+
+// Acquire an RwLock nonexclusively by a single task
+#[test]
+fn rwlock_read_uncontested() {
+    let rwlock = RwLock::<u32>::new(42);
+
+    let result = current_thread::block_on_all(lazy(|| {
+        rwlock.read().map(|guard| {
+            *guard
+        })
+    })).unwrap();
+
+    assert_eq!(result, 42);
+}
+
+// Attempt to acquire an rwlock exclusively when it already has a reader.
+// 1) task0 will run first, reading the rwlock's original value and blocking on
+//    rx.
+// 2) task1 will run next, but block on acquiring rwlock.
+// 3) task2 will run next, reading the rwlock's value and returning immediately.
+// 4) task3 will run next, waking up task0 with the oneshot
+// 5) finally task1 will acquire the rwlock and increment it.
+//
+// If RwLock::write is allowed to acquire an RwLock with readers, then task1
+// would erroneously run before task2, and task2 would return the wrong value.
+#[test]
+fn rwlock_read_write_contested() {
+    let rwlock = RwLock::<u32>::new(42);
+
+    let result = current_thread::block_on_all(lazy(|| {
+        let (tx, rx) = oneshot::channel::<()>();
+        let task0 = rwlock.read()
+            .and_then(move |guard| {
+                rx.map(move |_| { *guard }).map_err(|_| ())
+            });
+        let task1 = rwlock.write().map(|mut guard| *guard += 1);
+        let task2 = rwlock.read().map(|guard| *guard);
+        let task3 = lazy(move || {
+            tx.send(()).unwrap();
+            future::ok::<(), ()>(())
+        });
+        task0.join4(task1, task2, task3)
+    }));
+
+    assert_eq!(result, Ok((42, (), 42, ())));
+    assert_eq!(rwlock.try_unwrap().expect("try_unwrap"), 43);
+}
+
+
+// Acquire an uncontested RwLock in exclusive mode.  poll immediately returns
+// Async::Ready
+#[test]
+fn rwlock_write_uncontested() {
+    let rwlock = RwLock::<u32>::new(0);
+
+    current_thread::block_on_all(lazy(|| {
+        rwlock.write().map(|mut guard| {
+            *guard += 5;
+        })
+    })).unwrap();
+    assert_eq!(rwlock.try_unwrap().expect("try_unwrap"), 5);
+}
+
+// Pend on an RwLock held exclusively by another task in the same tokio Reactor.
+// poll returns Async::NotReady.  Later, it gets woken up without involving the
+// OS.
+#[test]
+fn rwlock_write_contested() {
+    let rwlock = RwLock::<u32>::new(0);
+
+    let result = current_thread::block_on_all(lazy(|| {
+        let (tx, rx) = oneshot::channel::<()>();
+        let task0 = rwlock.write()
+            .and_then(move |mut guard| {
+                *guard += 5;
+                rx.map_err(|_| ())
+            });
+        let task1 = rwlock.write().map(|guard| *guard);
+        let task2 = lazy(move || {
+            tx.send(()).unwrap();
+            future::ok::<(), ()>(())
+        });
+        task0.join3(task1, task2)
+    }));
+
+    assert_eq!(result, Ok(((), 5, ())));
+}
+
+// A single RwLock is contested by tasks in multiple threads
+#[test]
+fn rwlock_multithreaded() {
+    let rwlock = RwLock::<u32>::new(0);
+    let rwlock_clone0 = rwlock.clone();
+    let rwlock_clone1 = rwlock.clone();
+    let rwlock_clone2 = rwlock.clone();
+    let rwlock_clone3 = rwlock.clone();
+
+    let parent = lazy(move || {
+        tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
+            let rwlock_clone4 = rwlock_clone0.clone();
+            rwlock_clone0.write().map(|mut guard| { *guard += 2 })
+                .and_then(move |_| rwlock_clone4.read().map(|_| ()))
+        }));
+        tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
+            let rwlock_clone5 = rwlock_clone1.clone();
+            rwlock_clone1.write().map(|mut guard| { *guard += 3 })
+                .and_then(move |_| rwlock_clone5.read().map(|_| ()))
+        }));
+        tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
+            let rwlock_clone6 = rwlock_clone2.clone();
+            rwlock_clone2.write().map(|mut guard| { *guard += 5 })
+                .and_then(move |_| rwlock_clone6.read().map(|_| ()))
+        }));
+        tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
+            let rwlock_clone7 = rwlock_clone3.clone();
+            rwlock_clone3.write().map(|mut guard| { *guard += 7 })
+                .and_then(move |_| rwlock_clone7.read().map(|_| ()))
+        }));
+        future::ok::<(), ()>(())
+    });
+
+    tokio::run(parent);
+    assert_eq!(rwlock.try_unwrap().expect("try_unwrap"), 17_000);
+}
