@@ -52,19 +52,14 @@ impl<T> Future for MutexFut<T> {
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         if self.receiver.is_none() {
-            return Ok(Async::Ready(MutexGuard{mutex: self.mutex.clone()}));
+            Ok(Async::Ready(MutexGuard{mutex: self.mutex.clone()}))
         } else {
-            loop {
-                match self.receiver.poll() {
-                    Ok(Async::NotReady) => return Ok(Async::NotReady),
-                    Err(e) => panic!(
-                        "receiver.poll returned unanticipated error {:?}", e),
-                    Ok(Async::Ready(_)) => {
-                        match self.mutex.poll_lock() {
-                            Ok(guard) => return Ok(Async::Ready(guard)),
-                            Err(rx) => self.receiver = Some(rx),
-                        }
-                    }
+            match self.receiver.poll() {
+                Ok(Async::NotReady) => return Ok(Async::NotReady),
+                Err(e) => panic!(
+                    "receiver.poll returned unanticipated error {:?}", e),
+                Ok(Async::Ready(_)) => {
+                    Ok(Async::Ready(MutexGuard{mutex: self.mutex.clone()}))
                 }
             }
         }
@@ -139,7 +134,7 @@ impl<T> Mutex<T> {
     pub fn try_unwrap(self) -> Result<T, Mutex<T>> {
         match sync::Arc::try_unwrap(self.inner) {
             Ok(inner) => Ok({
-                // The unsafe is no longer needed as for somewhere around 1.25.0.
+                // `unsafe` is no longer needed as of somewhere around 1.25.0.
                 // https://github.com/rust-lang/rust/issues/35067
                 #[allow(unused_unsafe)]
                 unsafe { inner.data.into_inner() }
@@ -165,28 +160,17 @@ impl<T: ?Sized> Mutex<T> {
         }
     }
 
-    /// Like try_lock, but on failure registers for notification when the
-    /// lock is available
-    fn poll_lock(&self) -> Result<MutexGuard<T>, oneshot::Receiver<()>> {
-        let mut mtx_data = self.inner.mutex.lock().expect("sync::Mutex::lock");
-        if mtx_data.owned {
-            let (tx, rx) = oneshot::channel::<()>();
-            mtx_data.waiters.push_back(tx);
-            Err(rx)
-        } else {
-            mtx_data.owned = true;
-            Ok(MutexGuard{mutex: self.clone()})
-        }
-    }
-
     /// Release the `Mutex`
     fn unlock(&self) {
         let mut mtx_data = self.inner.mutex.lock().expect("sync::Mutex::lock");
         assert!(mtx_data.owned);
         if let Some(tx) = mtx_data.waiters.pop_back() {
+            // Send ownership to the waiter
             tx.send(()).expect("Sender::send");
+        } else {
+            // Relinquish ownership
+            mtx_data.owned = false;
         }
-        mtx_data.owned = false;
     }
 }
 
