@@ -139,6 +139,14 @@ struct Inner<T: ?Sized> {
     data: UnsafeCell<T>,
 }
 
+/// A Futures-aware RwLock.
+///
+/// `std::sync::RwLock` cannot be used in an asynchronous environment like
+/// Tokio, because an acquisition can block an entire reactor.  This class can
+/// be used instead.  It functions much like `std::sync::RwLock`.  Unlike that
+/// class, it also has a builtin `Arc`, making it accessible from multiple
+/// threads.  It's also safe to `clone`.  Also unlike `std::sync::RwLock`, this
+/// class does not detect lock poisoning.
 #[derive(Debug)]
 pub struct RwLock<T: ?Sized> {
     inner: sync::Arc<Inner<T>>,
@@ -183,6 +191,26 @@ impl<T> RwLock<T> {
 }
 
 impl<T: ?Sized> RwLock<T> {
+    /// Acquire the `RwLock` nonexclusively, read-only, blocking the task in the
+    /// meantime.
+    ///
+    /// When the returned `Future` is ready, then this task will have read-only
+    /// access to the protected data.
+    ///
+    /// # Examples
+    /// ```
+    /// # extern crate futures;
+    /// # extern crate futures_locks;
+    /// # use futures_locks::*;
+    /// # use futures::executor::{Spawn, spawn};
+    /// # use futures::Future;
+    /// # fn main() {
+    /// let rwlock = RwLock::<u32>::new(42);
+    /// let fut = rwlock.read().map(|mut guard| { *guard });
+    /// assert_eq!(spawn(fut).wait_future(), Ok(42));
+    /// # }
+    ///
+    /// ```
     pub fn read(&self) -> RwLockReadFut<T> {
         let mut lock_data = self.inner.mutex.lock().expect("sync::Mutex::lock");
         if lock_data.exclusive {
@@ -195,6 +223,27 @@ impl<T: ?Sized> RwLock<T> {
         }
     }
 
+    /// Acquire the `RwLock` exclusively, read-write, blocking the task in the
+    /// meantime.
+    ///
+    /// When the returned `Future` is ready, then this task will have read-write
+    /// access to the protected data.
+    ///
+    /// # Examples
+    /// ```
+    /// # extern crate futures;
+    /// # extern crate futures_locks;
+    /// # use futures_locks::*;
+    /// # use futures::executor::{Spawn, spawn};
+    /// # use futures::Future;
+    /// # fn main() {
+    /// let rwlock = RwLock::<u32>::new(42);
+    /// let fut = rwlock.write().map(|mut guard| { *guard = 5;});
+    /// spawn(fut).wait_future().expect("spawn");
+    /// assert_eq!(rwlock.try_unwrap().unwrap(), 5);
+    /// # }
+    ///
+    /// ```
     pub fn write(&self) -> RwLockWriteFut<T> {
         let mut lock_data = self.inner.mutex.lock().expect("sync::Mutex::lock");
         if lock_data.exclusive || lock_data.num_readers > 0 {
