@@ -191,6 +191,25 @@ impl<T> RwLock<T> {
 }
 
 impl<T: ?Sized> RwLock<T> {
+    /// Returns a reference to the underlying data, if there are no other
+    /// clones of the `RwLock`.
+    ///
+    /// Since this call borrows the `RwLock` mutably, no actual locking takes
+    /// place -- the mutable borrow statically guarantees no locks exist.
+    /// However, if the `RwLock` has already been cloned, then `None` will be
+    /// returned instead.
+    pub fn get_mut(&mut self) -> Option<&mut T> {
+        if let Some(inner) = sync::Arc::get_mut(&mut self.inner) {
+            let lock_data = inner.mutex.get_mut().unwrap();
+            let data = unsafe { inner.data.get().as_mut() }.unwrap();
+            debug_assert!(!lock_data.exclusive);
+            debug_assert_eq!(lock_data.num_readers, 0);
+            Some(data)
+        } else {
+            None
+        }
+    }
+
     /// Acquire the `RwLock` nonexclusively, read-only, blocking the task in the
     /// meantime.
     ///

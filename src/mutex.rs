@@ -145,6 +145,24 @@ impl<T> Mutex<T> {
 }
 
 impl<T: ?Sized> Mutex<T> {
+    /// Returns a reference to the underlying data, if there are no other
+    /// clones of the `Mutex`.
+    ///
+    /// Since this call borrows the `Mutex` mutably, no actual locking takes
+    /// place -- the mutable borrow statically guarantees no locks exist.
+    /// However, if the `Mutex` has already been cloned, then `None` will be
+    /// returned instead.
+    pub fn get_mut(&mut self) -> Option<&mut T> {
+        if let Some(inner) = sync::Arc::get_mut(&mut self.inner) {
+            let lock_data = inner.mutex.get_mut().unwrap();
+            let data = unsafe { inner.data.get().as_mut() }.unwrap();
+            debug_assert!(!lock_data.owned);
+            Some(data)
+        } else {
+            None
+        }
+    }
+
     /// Acquires a `Mutex`, blocking the task in the meantime.  When the
     /// returned `Future` is ready, this task will have sole access to the
     /// protected data.

@@ -10,6 +10,22 @@ use tokio::executor::current_thread;
 use futures_locks::*;
 
 
+// Mutably dereference a uniquely owned Mutex
+#[test]
+fn mutex_get_mut() {
+    let mut mutex = Mutex::<u32>::new(42);
+    *mutex.get_mut().unwrap() += 1;
+    assert_eq!(*mutex.get_mut().unwrap(), 43);
+}
+
+// Cloned Mutexes cannot be deferenced
+#[test]
+fn mutex_get_mut_cloned() {
+    let mut mutex = Mutex::<u32>::new(42);
+    let _clone = mutex.clone();
+    assert!(mutex.get_mut().is_none());
+}
+
 // Acquire an uncontested Mutex.  poll immediately returns Async::Ready
 #[test]
 fn mutex_lock_uncontested() {
@@ -74,6 +90,22 @@ fn mutex_lock_multithreaded() {
 
     tokio::run(parent);
     assert_eq!(mutex.try_unwrap().expect("try_unwrap"), 17_000);
+}
+
+// Mutably dereference a uniquely owned RwLock
+#[test]
+fn rwlock_get_mut() {
+    let mut rwlock = RwLock::<u32>::new(42);
+    *rwlock.get_mut().unwrap() += 1;
+    assert_eq!(*rwlock.get_mut().unwrap(), 43);
+}
+
+// Cloned RwLocks cannot be deferenced
+#[test]
+fn rwlock_get_mut_cloned() {
+    let mut rwlock = RwLock::<u32>::new(42);
+    let _clone = rwlock.clone();
+    assert!(rwlock.get_mut().is_none());
 }
 
 // Acquire an RwLock nonexclusively by two different tasks simultaneously .
