@@ -198,6 +198,18 @@ impl<T: ?Sized> RwLock<T> {
     /// place -- the mutable borrow statically guarantees no locks exist.
     /// However, if the `RwLock` has already been cloned, then `None` will be
     /// returned instead.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate futures_locks;
+    /// # use futures_locks::*;
+    /// # fn main() {
+    /// let mut lock = RwLock::<u32>::new(0);
+    /// *lock.get_mut().unwrap() += 5;
+    /// assert_eq!(lock.try_unwrap().unwrap(), 5);
+    /// # }
+    /// ```
     pub fn get_mut(&mut self) -> Option<&mut T> {
         if let Some(inner) = sync::Arc::get_mut(&mut self.inner) {
             let lock_data = inner.mutex.get_mut().unwrap();
