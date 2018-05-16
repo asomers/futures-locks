@@ -66,18 +66,22 @@ impl<T> Future for MutexFut<T> {
     }
 }
 
+// LCOV_EXCL_START
 #[derive(Debug)]
 struct MutexData {
     owned: bool,
     // FIFO queue of waiting tasks.
     waiters: VecDeque<oneshot::Sender<()>>,
 }
+// LCOV_EXCL_STOP
 
+// LCOV_EXCL_START
 #[derive(Debug)]
 struct Inner<T: ?Sized> {
     mutex: sync::Mutex<MutexData>,
     data: UnsafeCell<T>,
 }
+// LCOV_EXCL_STOP
 
 /// A Futures-aware Mutex.
 ///
@@ -103,10 +107,12 @@ struct Inner<T: ?Sized> {
 /// assert_eq!(mtx.try_unwrap().unwrap(), 5);
 /// # }
 /// ```
+// LCOV_EXCL_START
 #[derive(Debug)]
 pub struct Mutex<T: ?Sized> {
     inner: sync::Arc<Inner<T>>,
 }
+// LCOV_EXCL_STOP
 
 impl<T: ?Sized> Clone for Mutex<T> {
     fn clone(&self) -> Mutex<T> {
@@ -124,7 +130,7 @@ impl<T> Mutex<T> {
         let inner = Inner {
             mutex: sync::Mutex::new(mutex_data),
             data: UnsafeCell::new(t)
-        };
+        };  //LCOV_EXCL_LINE    kcov false negative
         Mutex { inner: sync::Arc::new(inner)}
     }
 

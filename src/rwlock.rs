@@ -118,6 +118,7 @@ impl<T> Future for RwLockWriteFut<T> {
     }
 }
 
+// LCOV_EXCL_START
 #[derive(Debug)]
 struct RwLockData {
     /// True iff the `RwLock` is currently exclusively owned
@@ -132,12 +133,15 @@ struct RwLockData {
     // FIFO queue of waiting writers
     write_waiters: VecDeque<oneshot::Sender<()>>,
 }
+// LCOV_EXCL_STOP
 
+// LCOV_EXCL_START
 #[derive(Debug)]
 struct Inner<T: ?Sized> {
     mutex: sync::Mutex<RwLockData>,
     data: UnsafeCell<T>,
 }
+// LCOV_EXCL_STOP
 
 /// A Futures-aware RwLock.
 ///
@@ -147,10 +151,12 @@ struct Inner<T: ?Sized> {
 /// class, it also has a builtin `Arc`, making it accessible from multiple
 /// threads.  It's also safe to `clone`.  Also unlike `std::sync::RwLock`, this
 /// class does not detect lock poisoning.
+// LCOV_EXCL_START
 #[derive(Debug)]
 pub struct RwLock<T: ?Sized> {
     inner: sync::Arc<Inner<T>>,
 }
+// LCOV_EXCL_STOP
 
 impl<T: ?Sized> Clone for RwLock<T> {
     fn clone(&self) -> RwLock<T> {
@@ -166,11 +172,11 @@ impl<T> RwLock<T> {
             num_readers: 0,
             read_waiters: VecDeque::new(),
             write_waiters: VecDeque::new(),
-        };
+        };  // LCOV_EXCL_LINE   kcov false negative
         let inner = Inner {
             mutex: sync::Mutex::new(lock_data),
             data: UnsafeCell::new(t)
-        };
+        };  // LCOV_EXCL_LINE   kcov false negative
         RwLock { inner: sync::Arc::new(inner)}
     }
 
