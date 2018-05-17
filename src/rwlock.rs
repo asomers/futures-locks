@@ -304,6 +304,7 @@ impl<T: ?Sized> RwLock<T> {
         let mut lock_data = self.inner.mutex.lock().expect("sync::Mutex::lock");
         assert!(lock_data.num_readers > 0);
         assert!(!lock_data.exclusive);
+        assert_eq!(lock_data.read_waiters.len(), 0);
         if lock_data.num_readers == 1 {
             if let Some(tx) = lock_data.write_waiters.pop_front() {
                 lock_data.num_readers -= 1;
@@ -312,11 +313,7 @@ impl<T: ?Sized> RwLock<T> {
                 return;
             }
         }
-        if let Some(tx) = lock_data.read_waiters.pop_front() {
-            tx.send(()).expect("Sender::send");
-        } else {
-            lock_data.num_readers -= 1;
-        }
+        lock_data.num_readers -= 1;
     }
 
     /// Release an exclusive lock of an `RwLock`.
@@ -326,12 +323,12 @@ impl<T: ?Sized> RwLock<T> {
         assert!(lock_data.exclusive);
         if let Some(tx) = lock_data.write_waiters.pop_front() {
             tx.send(()).expect("Sender::send");
-        } else if let Some(tx) = lock_data.read_waiters.pop_front() {
-            lock_data.num_readers += 1;
-            lock_data.exclusive = false;
-            tx.send(()).expect("Sender::send");
         } else {
             lock_data.exclusive = false;
+            lock_data.num_readers += lock_data.read_waiters.len() as u32;
+            for tx in lock_data.read_waiters.drain(..) {
+                tx.send(()).expect("Sender::send");
+            }
         }
     }
 }
