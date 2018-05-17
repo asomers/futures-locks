@@ -92,6 +92,13 @@ fn mutex_lock_multithreaded() {
     assert_eq!(mutex.try_unwrap().expect("try_unwrap"), 17_000);
 }
 
+#[test]
+fn mutex_try_unwrap_multiply_referenced() {
+    let mtx = Mutex::<u32>::new(0);
+    let _mtx2 = mtx.clone();
+    assert!(mtx.try_unwrap().is_err());
+}
+
 // Mutably dereference a uniquely owned RwLock
 #[test]
 fn rwlock_get_mut() {
@@ -207,7 +214,7 @@ fn rwlock_read_write_contested() {
 #[test]
 fn rwlock_try_unwrap_multiply_referenced() {
     let rwlock = RwLock::<u32>::new(0);
-    let rwlock2 = rwlock.clone();
+    let _rwlock2 = rwlock.clone();
     assert!(rwlock.try_unwrap().is_err());
 }
 
