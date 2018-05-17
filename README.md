@@ -5,6 +5,7 @@ in asynchronous environments like [Tokio].  When they block, they'll only block
 a single task, not the entire reactor.
 
 [![Build Status](https://travis-ci.org/asomers/futures-locks.svg?branch=master)](https://travis-ci.org/asomers/futures-locks)
+[![CodeCov.io](https://codecov.io/gh/asomers/futures-locks/branch/master/graph/badge.svg)](https://codecov.io/gh/asomers/futures-locks)
 
 [Futures]: https://github.com/rust-lang-nursery/futures-rs
 [Tokio]: https:/tokio.rs
