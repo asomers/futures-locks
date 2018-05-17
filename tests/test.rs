@@ -146,6 +146,30 @@ fn rwlock_read_uncontested() {
     assert_eq!(result, 42);
 }
 
+// Attempt to acquire an RwLock for reading that already has a writer
+#[test]
+fn rwlock_read_contested() {
+    let rwlock = RwLock::<u32>::new(0);
+
+    let result = current_thread::block_on_all(lazy(|| {
+        let (tx, rx) = oneshot::channel::<()>();
+        let task0 = rwlock.write()
+            .and_then(move |mut guard| {
+                *guard += 5;
+                rx.map_err(|_| ())
+            });
+        let task1 = rwlock.read().map(|guard| *guard);
+        let task2 = rwlock.read().map(|guard| *guard);
+        let task3 = lazy(move || {
+            tx.send(()).unwrap();
+            future::ok::<(), ()>(())
+        });
+        task0.join4(task1, task2, task3)
+    }));
+
+    assert_eq!(result, Ok(((), 5, 5, ())));
+}
+
 // Attempt to acquire an rwlock exclusively when it already has a reader.
 // 1) task0 will run first, reading the rwlock's original value and blocking on
 //    rx.
@@ -179,6 +203,13 @@ fn rwlock_read_write_contested() {
     assert_eq!(rwlock.try_unwrap().expect("try_unwrap"), 43);
 }
 
+
+#[test]
+fn rwlock_try_unwrap_multiply_referenced() {
+    let rwlock = RwLock::<u32>::new(0);
+    let rwlock2 = rwlock.clone();
+    assert!(rwlock.try_unwrap().is_err());
+}
 
 // Acquire an uncontested RwLock in exclusive mode.  poll immediately returns
 // Async::Ready
