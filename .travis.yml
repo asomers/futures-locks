@@ -30,14 +30,16 @@ addons:
 
 after_success:
 - |
-  cargo install cargo-kcov &&
-  if [ ! -x $HOME/.cargo/bin/kcov ] || [ ! -f $HOME/.cargo/bin/kcov ]; then
-    mkdir kcov
-    cd kcov
-    cargo kcov --print-install-kcov-sh | sh
-    cd ${TRAVIS_BUILD_DIR}
-    rm -rf kcov
-  fi &&
-  cargo kcov --verbose -- --include-pattern='futures-locks/src' &&
-  bash <(curl -s https://codecov.io/bash) &&
-  echo "CodeCov: uploaded coverage data"
+  if [ "$TRAVIS_RUST_VERSION" = "stable" ]; then
+    cargo install cargo-kcov &&
+    if [ ! -x $HOME/.cargo/bin/kcov ] || [ ! -f $HOME/.cargo/bin/kcov ]; then
+      mkdir kcov
+      cd kcov
+      cargo kcov --print-install-kcov-sh | sh
+      cd ${TRAVIS_BUILD_DIR}
+      rm -rf kcov
+    fi &&
+    cargo kcov --verbose -- --include-pattern='futures-locks/src' &&
+    bash <(curl -s https://codecov.io/bash) &&
+    echo "CodeCov: uploaded coverage data"
+  fi
