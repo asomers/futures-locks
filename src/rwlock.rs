@@ -76,8 +76,11 @@ impl<T> Future for RwLockReadFut<T> {
         } else {
             match self.receiver.poll() {
                 Ok(Async::NotReady) => return Ok(Async::NotReady),
-                Err(e) => panic!(
-                    "receiver.poll returned unanticipated error {:?}", e),
+                // It's impossible for receiver.poll() to return an error.  The
+                // only way that would happen is if the sender got dropped.  But
+                // that can't happen because the RwLock owns the sender, and the
+                // Fut retains a clone of the RwLock
+                Err(_) => unreachable!(),
                 Ok(Async::Ready(_)) => {
                     Ok(Async::Ready(RwLockReadGuard{rwlock: self.rwlock.clone()}))
                 }
@@ -108,8 +111,11 @@ impl<T> Future for RwLockWriteFut<T> {
         } else {
             match self.receiver.poll() {
                 Ok(Async::NotReady) => return Ok(Async::NotReady),
-                Err(e) => panic!(
-                    "receiver.poll returned unanticipated error {:?}", e),
+                // It's impossible for receiver.poll() to return an error.  The
+                // only way that would happen is if the sender got dropped.  But
+                // that can't happen because the RwLock owns the sender, and the
+                // Fut retains a clone of the RwLock
+                Err(_) => unreachable!(),
                 Ok(Async::Ready(_)) => {
                     Ok(Async::Ready(RwLockWriteGuard{rwlock: self.rwlock.clone()}))
                 }
