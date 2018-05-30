@@ -92,6 +92,24 @@ fn mutex_lock_multithreaded() {
     assert_eq!(mutex.try_unwrap().expect("try_unwrap"), 17_000);
 }
 
+// Acquire an uncontested Mutex with try_lock
+#[test]
+fn mutex_try_lock_uncontested() {
+    let mutex = Mutex::<u32>::new(5);
+
+    let guard = mutex.try_lock().unwrap();
+    assert_eq!(5, *guard);
+}
+
+// Try and fail to acquire a contested Mutex with try_lock
+#[test]
+fn mutex_try_lock_contested() {
+    let mutex = Mutex::<u32>::new(0);
+
+    let _guard = mutex.try_lock().unwrap();
+    assert!(mutex.try_lock().is_err());
+}
+
 #[test]
 fn mutex_try_unwrap_multiply_referenced() {
     let mtx = Mutex::<u32>::new(0);
@@ -210,12 +228,38 @@ fn rwlock_read_write_contested() {
     assert_eq!(rwlock.try_unwrap().expect("try_unwrap"), 43);
 }
 
+#[test]
+fn rwlock_try_read_uncontested() {
+    let rwlock = RwLock::<u32>::new(42);
+    assert_eq!(42, *rwlock.try_read().unwrap());
+}
+
+#[test]
+fn rwlock_try_read_contested() {
+    let rwlock = RwLock::<u32>::new(42);
+    let _guard = rwlock.try_write();
+    assert!(rwlock.try_read().is_err());
+}
 
 #[test]
 fn rwlock_try_unwrap_multiply_referenced() {
     let rwlock = RwLock::<u32>::new(0);
     let _rwlock2 = rwlock.clone();
     assert!(rwlock.try_unwrap().is_err());
+}
+
+#[test]
+fn rwlock_try_write_uncontested() {
+    let rwlock = RwLock::<u32>::new(0);
+    *rwlock.try_write().unwrap() += 5;
+    assert_eq!(5, rwlock.try_unwrap().unwrap());
+}
+
+#[test]
+fn rwlock_try_write_contested() {
+    let rwlock = RwLock::<u32>::new(42);
+    let _guard = rwlock.try_read();
+    assert!(rwlock.try_write().is_err());
 }
 
 // Acquire an uncontested RwLock in exclusive mode.  poll immediately returns

@@ -299,6 +299,62 @@ impl<T: ?Sized> RwLock<T> {
         }
     }
 
+    /// Attempts to acquire the `RwLock` nonexclusively.
+    ///
+    /// If the operation would block, returns `Err` instead.  Otherwise, returns
+    /// a guard (not a `Future`).
+    ///
+    /// # Examples
+    /// ```
+    /// # extern crate futures_locks;
+    /// # use futures_locks::*;
+    /// # fn main() {
+    /// let mut lock = RwLock::<u32>::new(5);
+    /// let r = match lock.try_read() {
+    ///     Ok(guard) => *guard,
+    ///     Err(()) => panic!("Better luck next time!")
+    /// };
+    /// assert_eq!(5, r);
+    /// # }
+    /// ```
+    pub fn try_read(&self) -> Result<RwLockReadGuard<T>, ()> {
+        let mut lock_data = self.inner.mutex.lock().expect("sync::Mutex::lock");
+        if lock_data.exclusive {
+            Err(())
+        } else {
+            lock_data.num_readers += 1;
+            Ok(RwLockReadGuard{rwlock: self.clone()})
+        }
+    }
+
+    /// Attempts to acquire the `RwLock` exclusively.
+    ///
+    /// If the operation would block, returns `Err` instead.  Otherwise, returns
+    /// a guard (not a `Future`).
+    ///
+    /// # Examples
+    /// ```
+    /// # extern crate futures_locks;
+    /// # use futures_locks::*;
+    /// # fn main() {
+    /// let mut lock = RwLock::<u32>::new(5);
+    /// match lock.try_write() {
+    ///     Ok(mut guard) => *guard += 5,
+    ///     Err(()) => panic!("Better luck next time!")
+    /// }
+    /// assert_eq!(10, lock.try_unwrap().unwrap());
+    /// # }
+    /// ```
+    pub fn try_write(&self) -> Result<RwLockWriteGuard<T>, ()> {
+        let mut lock_data = self.inner.mutex.lock().expect("sync::Mutex::lock");
+        if lock_data.exclusive || lock_data.num_readers > 0 {
+            Err(())
+        } else {
+            lock_data.exclusive = true;
+            Ok(RwLockWriteGuard{rwlock: self.clone()})
+        }
+    }
+
     /// Release a shared lock of an `RwLock`.
     fn unlock_reader(&self) {
         let mut lock_data = self.inner.mutex.lock().expect("sync::Mutex::lock");

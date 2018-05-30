@@ -199,6 +199,33 @@ impl<T: ?Sized> Mutex<T> {
         }
     }
 
+    /// Attempts to acquire the lock.
+    ///
+    /// If the operation would block, returns `Err` instead.  Otherwise, returns
+    /// a guard (not a `Future`).
+    ///
+    /// # Examples
+    /// ```
+    /// # extern crate futures_locks;
+    /// # use futures_locks::*;
+    /// # fn main() {
+    /// let mut mtx = Mutex::<u32>::new(0);
+    /// match mtx.try_lock() {
+    ///     Ok(mut guard) => *guard += 5,
+    ///     Err(()) => println!("Better luck next time!")
+    /// };
+    /// # }
+    /// ```
+    pub fn try_lock(&self) -> Result<MutexGuard<T>, ()> {
+        let mut mtx_data = self.inner.mutex.lock().expect("sync::Mutex::lock");
+        if mtx_data.owned {
+            Err(())
+        } else {
+            mtx_data.owned = true;
+            Ok(MutexGuard{mutex: self.clone()})
+        }
+    }
+
     /// Release the `Mutex`
     fn unlock(&self) {
         let mut mtx_data = self.inner.mutex.lock().expect("sync::Mutex::lock");
