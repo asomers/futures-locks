@@ -9,9 +9,11 @@ description = """
 Futures-aware lock primitives
 """
 categories = ["asynchronous"]
+documentation = "https://docs.rs/futures-locks"
 exclude = [
 	".gitignore",
-	".travis.yml"
+	".travis.yml",
+	"release.toml"
 ]
 
 [dependencies]
