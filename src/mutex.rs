@@ -36,13 +36,47 @@ impl<T: ?Sized> DerefMut for MutexGuard<T> {
 
 /// A `Future` representation a pending `Mutex` acquisition.
 pub struct MutexFut<T: ?Sized> {
+    /// Has this Future already acquired the Mutex?
+    acquired: bool,
     receiver: Option<oneshot::Receiver<()>>,
     mutex: Mutex<T>,
 }
 
 impl<T: ?Sized> MutexFut<T> {
     fn new(rx: Option<oneshot::Receiver<()>>, mutex: Mutex<T>) -> Self {
-        MutexFut{receiver: rx, mutex}
+        MutexFut{acquired: false, receiver: rx, mutex}
+    }
+}
+
+impl<T: ?Sized> Drop for MutexFut<T> {
+    fn drop(&mut self) {
+        if ! self.acquired {
+            if let Some(ref mut rx) = &mut self.receiver {
+                rx.close();
+                // TODO: futures-0.2.0 introduces a try_recv method that is
+                // better to use here than poll.  Use it after upgrading to
+                // futures >= 0.2.0
+                match rx.poll() {
+                    Ok(Async::Ready(())) => {
+                        // This future received ownership of the mutex, but got
+                        // dropped before it was ever polled.  Release the
+                        // mutex.
+                        self.mutex.unlock()
+                    },
+                    Ok(Async::NotReady) => {
+                        // Dropping the Future before it acquires the Mutex is
+                        // equivalent to cancelling it.
+                    },
+                    Err(oneshot::Canceled) => {
+                        // Never received ownership of the mutex
+                    }
+                }
+            } else {
+                // Even though the future was immediately ready, it never got
+                // polled.
+                self.mutex.unlock();
+            }
+        }
     }
 }
 
@@ -52,6 +86,7 @@ impl<T> Future for MutexFut<T> {
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         if self.receiver.is_none() {
+            self.acquired = true;
             Ok(Async::Ready(MutexGuard{mutex: self.mutex.clone()}))
         } else {
             match self.receiver.poll() {
@@ -62,6 +97,7 @@ impl<T> Future for MutexFut<T> {
                 // Fut retains a clone of the RwLock
                 Err(_) => unreachable!(),
                 Ok(Async::Ready(_)) => {
+                    self.acquired = true;
                     Ok(Async::Ready(MutexGuard{mutex: self.mutex.clone()}))
                 }
             }

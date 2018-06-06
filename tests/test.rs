@@ -14,6 +14,42 @@ mod mutex {
 use super::*;
 use futures::{Future, Stream};
 
+// When an owned but not yet polled Mutex future is dropped, it should
+// relinquish ownership.  If not, deadlocks may result.
+#[test]
+fn drop_before_poll() {
+    let mutex = Mutex::<u32>::new(0);
+
+    let _ = current_thread::block_on_all(lazy(|| {
+        let mut fut1 = mutex.lock(); // fut1 immediately gets ownership
+        let guard1 = fut1.poll().unwrap();
+        let mut fut2 = mutex.lock();
+        assert!(!fut2.poll().unwrap().is_ready());
+        drop(guard1);                // ownership transfers to fut2
+        drop(fut1);
+        drop(fut2);                  // relinquish ownership
+        let mut fut3 = mutex.lock(); // fut3 immediately gets ownership
+        assert!(fut3.poll().unwrap().is_ready());
+        future::ok::<(), ()>(())
+    }));
+}
+
+// When an owned but not yet polled Mutex future is dropped, it should
+// relinquish ownership.  If not, deadlocks may result.
+#[test]
+fn drop_immediately_ready_before_poll() {
+    let mutex = Mutex::<u32>::new(0);
+
+    let _ = current_thread::block_on_all(lazy(|| {
+        let fut1 = mutex.lock();        // fut1 immediately gets ownership
+        let mut fut2 = mutex.lock();
+        assert!(!fut2.poll().unwrap().is_ready());
+        drop(fut1);                     // ownership transfers to fut2
+        assert!(fut2.poll().unwrap().is_ready());
+        future::ok::<(), ()>(())
+    }));
+}
+
 // Mutably dereference a uniquely owned Mutex
 #[test]
 fn get_mut() {
@@ -126,6 +162,78 @@ fn try_unwrap_multiply_referenced() {
 mod rwlock {
 use super::*;
 use futures::{Future, Stream};
+
+// When an exclusively owned but not yet polled RwLock future is dropped, it
+// should relinquish ownership.  If not, deadlocks may result.
+#[test]
+fn drop_exclusive_before_poll() {
+    let rwlock = RwLock::<u32>::new(42);
+
+    let _ = current_thread::block_on_all(lazy(|| {
+        let mut fut1 = rwlock.read();   // fut1 immediately gets ownership
+        let guard1 = fut1.poll().unwrap();
+        let mut fut2 = rwlock.write();
+        assert!(!fut2.poll().unwrap().is_ready());
+        drop(guard1);
+        drop(fut1);                     // ownership transfers to fut2
+        drop(fut2);                     // relinquish ownership
+        let mut fut3 = rwlock.read();   // fut3 immediately gets ownership
+        assert!(fut3.poll().unwrap().is_ready());
+        future::ok::<(), ()>(())
+    }));
+}
+
+// When an exclusively owned but not yet polled RwLock future is dropped, it
+// should relinquish ownership.  If not, deadlocks may result.
+#[test]
+fn drop_exclusive_immediately_ready_before_poll() {
+    let rwlock = RwLock::<u32>::new(42);
+
+    let _ = current_thread::block_on_all(lazy(|| {
+        let fut1 = rwlock.write();      // fut1 immediately gets ownership
+        let mut fut2 = rwlock.read();
+        assert!(!fut2.poll().unwrap().is_ready());
+        drop(fut1);                     // ownership transfers to fut2
+        assert!(fut2.poll().unwrap().is_ready());
+        future::ok::<(), ()>(())
+    }));
+}
+
+// When an nonexclusively owned but not yet polled RwLock future is dropped, it
+// should relinquish ownership.  If not, deadlocks may result.
+#[test]
+fn drop_shared_before_poll() {
+    let rwlock = RwLock::<u32>::new(42);
+
+    let _ = current_thread::block_on_all(lazy(|| {
+        let mut fut1 = rwlock.write();  // fut1 immediately gets ownership
+        let guard1 = fut1.poll().unwrap();
+        let mut fut2 = rwlock.read();
+        assert!(!fut2.poll().unwrap().is_ready());
+        drop(guard1);
+        drop(fut1);                     // ownership transfers to fut2
+        drop(fut2);                     // relinquish ownership
+        let mut fut3 = rwlock.write();  // fut3 immediately gets ownership
+        assert!(fut3.poll().unwrap().is_ready());
+        future::ok::<(), ()>(())
+    }));
+}
+
+// When an nonexclusively owned but not yet polled RwLock future is dropped, it
+// should relinquish ownership.  If not, deadlocks may result.
+#[test]
+fn drop_shared_immediately_ready_before_poll() {
+    let rwlock = RwLock::<u32>::new(42);
+
+    let _ = current_thread::block_on_all(lazy(|| {
+        let fut1 = rwlock.read();       // fut1 immediately gets ownership
+        let mut fut2 = rwlock.write();
+        assert!(!fut2.poll().unwrap().is_ready());
+        drop(fut1);                     // ownership transfers to fut2
+        assert!(fut2.poll().unwrap().is_ready());
+        future::ok::<(), ()>(())
+    }));
+}
 
 // Mutably dereference a uniquely owned RwLock
 #[test]

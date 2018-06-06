@@ -56,13 +56,47 @@ impl<T: ?Sized> Drop for RwLockWriteGuard<T> {
 
 /// A `Future` representation a pending `RwLock` shared acquisition.
 pub struct RwLockReadFut<T: ?Sized> {
+    /// Has this Future already acquired the RwLock?
+    acquired: bool,
     receiver: Option<oneshot::Receiver<()>>,
     rwlock: RwLock<T>,
 }
 
 impl<T: ?Sized> RwLockReadFut<T> {
     fn new(rx: Option<oneshot::Receiver<()>>, rwlock: RwLock<T>) -> Self {
-        RwLockReadFut{receiver: rx, rwlock}
+        RwLockReadFut{acquired: false, receiver: rx, rwlock}
+    }
+}
+
+impl<T: ?Sized> Drop for RwLockReadFut<T> {
+    fn drop(&mut self) {
+        if ! self.acquired {
+            if let Some(ref mut rx) = &mut self.receiver {
+                rx.close();
+                // TODO: futures-0.2.0 introduces a try_recv method that is
+                // better to use here than poll.  Use it after upgrading to
+                // futures >= 0.2.0
+                match rx.poll() {
+                    Ok(Async::Ready(())) => {
+                        // This future received ownership of the lock, but got
+                        // dropped before it was ever polled.  Release the
+                        // lock.
+                        self.rwlock.unlock_reader()
+                    },
+                    Ok(Async::NotReady) => {
+                        // Dropping the Future before it acquires the lock is
+                        // equivalent to cancelling it.
+                    },
+                    Err(oneshot::Canceled) => {
+                        // Never received ownership of the lock
+                    }
+                }
+            } else {
+                // Even though the future was immediately ready, it never got
+                // polled.
+                self.rwlock.unlock_reader();
+            }
+        }
     }
 }
 
@@ -72,6 +106,7 @@ impl<T> Future for RwLockReadFut<T> {
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         if self.receiver.is_none() {
+            self.acquired = true;
             Ok(Async::Ready(RwLockReadGuard{rwlock: self.rwlock.clone()}))
         } else {
             match self.receiver.poll() {
@@ -82,7 +117,10 @@ impl<T> Future for RwLockReadFut<T> {
                 // Fut retains a clone of the RwLock
                 Err(_) => unreachable!(),
                 Ok(Async::Ready(_)) => {
-                    Ok(Async::Ready(RwLockReadGuard{rwlock: self.rwlock.clone()}))
+                    self.acquired = true;
+                    Ok(Async::Ready(
+                        RwLockReadGuard{ rwlock: self.rwlock.clone() }
+                    ))
                 }
             }
         }
@@ -91,13 +129,47 @@ impl<T> Future for RwLockReadFut<T> {
 
 /// A `Future` representation a pending `RwLock` exclusive acquisition.
 pub struct RwLockWriteFut<T: ?Sized> {
+    /// Has this Future already acquired the RwLock?
+    acquired: bool,
     receiver: Option<oneshot::Receiver<()>>,
     rwlock: RwLock<T>,
 }
 
 impl<T: ?Sized> RwLockWriteFut<T> {
     fn new(rx: Option<oneshot::Receiver<()>>, rwlock: RwLock<T>) -> Self {
-        RwLockWriteFut{receiver: rx, rwlock}
+        RwLockWriteFut{acquired: false, receiver: rx, rwlock}
+    }
+}
+
+impl<T: ?Sized> Drop for RwLockWriteFut<T> {
+    fn drop(&mut self) {
+        if ! self.acquired {
+            if let Some(ref mut rx) = &mut self.receiver {
+                rx.close();
+                // TODO: futures-0.2.0 introduces a try_recv method that is
+                // better to use here than poll.  Use it after upgrading to
+                // futures >= 0.2.0
+                match rx.poll() {
+                    Ok(Async::Ready(())) => {
+                        // This future received ownership of the lock, but got
+                        // dropped before it was ever polled.  Release the
+                        // lock.
+                        self.rwlock.unlock_writer()
+                    },
+                    Ok(Async::NotReady) => {
+                        // Dropping the Future before it acquires the lock is
+                        // equivalent to cancelling it.
+                    },
+                    Err(oneshot::Canceled) => {
+                        // Never received ownership of the lock
+                    }
+                }
+            } else {
+                // Even though the future was immediately ready, it never got
+                // polled.
+                self.rwlock.unlock_writer();
+            }
+        }
     }
 }
 
@@ -107,6 +179,7 @@ impl<T> Future for RwLockWriteFut<T> {
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         if self.receiver.is_none() {
+            self.acquired = true;
             Ok(Async::Ready(RwLockWriteGuard{rwlock: self.rwlock.clone()}))
         } else {
             match self.receiver.poll() {
@@ -117,7 +190,10 @@ impl<T> Future for RwLockWriteFut<T> {
                 // Fut retains a clone of the RwLock
                 Err(_) => unreachable!(),
                 Ok(Async::Ready(_)) => {
-                    Ok(Async::Ready(RwLockWriteGuard{rwlock: self.rwlock.clone()}))
+                    self.acquired = true;
+                    Ok(Async::Ready(
+                        RwLockWriteGuard{rwlock: self.rwlock.clone()}
+                    ))
                 }
             }
         }
