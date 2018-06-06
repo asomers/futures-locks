@@ -4,15 +4,19 @@ extern crate futures;
 extern crate tokio;
 extern crate futures_locks;
 
-use futures::{Future, Stream, future, lazy, stream};
+use futures::{future, lazy, stream};
 use futures::sync::oneshot;
 use tokio::executor::current_thread;
 use futures_locks::*;
 
 
+mod mutex {
+use super::*;
+use futures::{Future, Stream};
+
 // Mutably dereference a uniquely owned Mutex
 #[test]
-fn mutex_get_mut() {
+fn get_mut() {
     let mut mutex = Mutex::<u32>::new(42);
     *mutex.get_mut().unwrap() += 1;
     assert_eq!(*mutex.get_mut().unwrap(), 43);
@@ -20,7 +24,7 @@ fn mutex_get_mut() {
 
 // Cloned Mutexes cannot be deferenced
 #[test]
-fn mutex_get_mut_cloned() {
+fn get_mut_cloned() {
     let mut mutex = Mutex::<u32>::new(42);
     let _clone = mutex.clone();
     assert!(mutex.get_mut().is_none());
@@ -28,7 +32,7 @@ fn mutex_get_mut_cloned() {
 
 // Acquire an uncontested Mutex.  poll immediately returns Async::Ready
 #[test]
-fn mutex_lock_uncontested() {
+fn lock_uncontested() {
     let mutex = Mutex::<u32>::new(0);
 
     let result = current_thread::block_on_all(lazy(|| {
@@ -42,7 +46,7 @@ fn mutex_lock_uncontested() {
 // Pend on a Mutex held by another task in the same tokio Reactor.  poll returns
 // Async::NotReady.  Later, it gets woken up without involving the OS.
 #[test]
-fn mutex_lock_contested() {
+fn lock_contested() {
     let mutex = Mutex::<u32>::new(0);
 
     let result = current_thread::block_on_all(lazy(|| {
@@ -65,7 +69,7 @@ fn mutex_lock_contested() {
 
 // A single Mutex is contested by tasks in multiple threads
 #[test]
-fn mutex_lock_multithreaded() {
+fn lock_multithreaded() {
     let mutex = Mutex::<u32>::new(0);
     let mtx_clone0 = mutex.clone();
     let mtx_clone1 = mutex.clone();
@@ -94,7 +98,7 @@ fn mutex_lock_multithreaded() {
 
 // Acquire an uncontested Mutex with try_lock
 #[test]
-fn mutex_try_lock_uncontested() {
+fn try_lock_uncontested() {
     let mutex = Mutex::<u32>::new(5);
 
     let guard = mutex.try_lock().unwrap();
@@ -103,7 +107,7 @@ fn mutex_try_lock_uncontested() {
 
 // Try and fail to acquire a contested Mutex with try_lock
 #[test]
-fn mutex_try_lock_contested() {
+fn try_lock_contested() {
     let mutex = Mutex::<u32>::new(0);
 
     let _guard = mutex.try_lock().unwrap();
@@ -111,15 +115,21 @@ fn mutex_try_lock_contested() {
 }
 
 #[test]
-fn mutex_try_unwrap_multiply_referenced() {
+fn try_unwrap_multiply_referenced() {
     let mtx = Mutex::<u32>::new(0);
     let _mtx2 = mtx.clone();
     assert!(mtx.try_unwrap().is_err());
 }
 
+}
+
+mod rwlock {
+use super::*;
+use futures::{Future, Stream};
+
 // Mutably dereference a uniquely owned RwLock
 #[test]
-fn rwlock_get_mut() {
+fn get_mut() {
     let mut rwlock = RwLock::<u32>::new(42);
     *rwlock.get_mut().unwrap() += 1;
     assert_eq!(*rwlock.get_mut().unwrap(), 43);
@@ -127,7 +137,7 @@ fn rwlock_get_mut() {
 
 // Cloned RwLocks cannot be deferenced
 #[test]
-fn rwlock_get_mut_cloned() {
+fn get_mut_cloned() {
     let mut rwlock = RwLock::<u32>::new(42);
     let _clone = rwlock.clone();
     assert!(rwlock.get_mut().is_none());
@@ -135,7 +145,7 @@ fn rwlock_get_mut_cloned() {
 
 // Acquire an RwLock nonexclusively by two different tasks simultaneously .
 #[test]
-fn rwlock_read_shared() {
+fn read_shared() {
     let rwlock = RwLock::<u32>::new(42);
 
     let result = current_thread::block_on_all(lazy(|| {
@@ -159,7 +169,7 @@ fn rwlock_read_shared() {
 
 // Acquire an RwLock nonexclusively by a single task
 #[test]
-fn rwlock_read_uncontested() {
+fn read_uncontested() {
     let rwlock = RwLock::<u32>::new(42);
 
     let result = current_thread::block_on_all(lazy(|| {
@@ -173,7 +183,7 @@ fn rwlock_read_uncontested() {
 
 // Attempt to acquire an RwLock for reading that already has a writer
 #[test]
-fn rwlock_read_contested() {
+fn read_contested() {
     let rwlock = RwLock::<u32>::new(0);
 
     let result = current_thread::block_on_all(lazy(|| {
@@ -206,7 +216,7 @@ fn rwlock_read_contested() {
 // If RwLock::write is allowed to acquire an RwLock with readers, then task1
 // would erroneously run before task2, and task2 would return the wrong value.
 #[test]
-fn rwlock_read_write_contested() {
+fn read_write_contested() {
     let rwlock = RwLock::<u32>::new(42);
 
     let result = current_thread::block_on_all(lazy(|| {
@@ -229,34 +239,34 @@ fn rwlock_read_write_contested() {
 }
 
 #[test]
-fn rwlock_try_read_uncontested() {
+fn try_read_uncontested() {
     let rwlock = RwLock::<u32>::new(42);
     assert_eq!(42, *rwlock.try_read().unwrap());
 }
 
 #[test]
-fn rwlock_try_read_contested() {
+fn try_read_contested() {
     let rwlock = RwLock::<u32>::new(42);
     let _guard = rwlock.try_write();
     assert!(rwlock.try_read().is_err());
 }
 
 #[test]
-fn rwlock_try_unwrap_multiply_referenced() {
+fn try_unwrap_multiply_referenced() {
     let rwlock = RwLock::<u32>::new(0);
     let _rwlock2 = rwlock.clone();
     assert!(rwlock.try_unwrap().is_err());
 }
 
 #[test]
-fn rwlock_try_write_uncontested() {
+fn try_write_uncontested() {
     let rwlock = RwLock::<u32>::new(0);
     *rwlock.try_write().unwrap() += 5;
     assert_eq!(5, rwlock.try_unwrap().unwrap());
 }
 
 #[test]
-fn rwlock_try_write_contested() {
+fn try_write_contested() {
     let rwlock = RwLock::<u32>::new(42);
     let _guard = rwlock.try_read();
     assert!(rwlock.try_write().is_err());
@@ -265,7 +275,7 @@ fn rwlock_try_write_contested() {
 // Acquire an uncontested RwLock in exclusive mode.  poll immediately returns
 // Async::Ready
 #[test]
-fn rwlock_write_uncontested() {
+fn write_uncontested() {
     let rwlock = RwLock::<u32>::new(0);
 
     current_thread::block_on_all(lazy(|| {
@@ -280,7 +290,7 @@ fn rwlock_write_uncontested() {
 // poll returns Async::NotReady.  Later, it gets woken up without involving the
 // OS.
 #[test]
-fn rwlock_write_contested() {
+fn write_contested() {
     let rwlock = RwLock::<u32>::new(0);
 
     let result = current_thread::block_on_all(lazy(|| {
@@ -303,7 +313,7 @@ fn rwlock_write_contested() {
 
 // A single RwLock is contested by tasks in multiple threads
 #[test]
-fn rwlock_multithreaded() {
+fn multithreaded() {
     let rwlock = RwLock::<u32>::new(0);
     let rwlock_clone0 = rwlock.clone();
     let rwlock_clone1 = rwlock.clone();
@@ -336,4 +346,6 @@ fn rwlock_multithreaded() {
 
     tokio::run(parent);
     assert_eq!(rwlock.try_unwrap().expect("try_unwrap"), 17_000);
+}
+
 }
