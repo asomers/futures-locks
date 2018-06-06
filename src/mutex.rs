@@ -7,6 +7,7 @@ use std::clone::Clone;
 use std::collections::VecDeque;
 use std::ops::{Deref, DerefMut};
 use std::sync;
+use super::FutState;
 
 /// An RAII mutex guard, much like `std::sync::MutexGuard`.  The wrapped data
 /// can be accessed via its `Deref` and `DerefMut` implementations.
@@ -34,24 +35,25 @@ impl<T: ?Sized> DerefMut for MutexGuard<T> {
     }
 }
 
-/// A `Future` representation a pending `Mutex` acquisition.
+/// A `Future` representing a pending `Mutex` acquisition.
 pub struct MutexFut<T: ?Sized> {
-    /// Has this Future already acquired the Mutex?
-    acquired: bool,
-    receiver: Option<oneshot::Receiver<()>>,
+    state: FutState,
     mutex: Mutex<T>,
 }
 
 impl<T: ?Sized> MutexFut<T> {
-    fn new(rx: Option<oneshot::Receiver<()>>, mutex: Mutex<T>) -> Self {
-        MutexFut{acquired: false, receiver: rx, mutex}
+    fn new(state: FutState, mutex: Mutex<T>) -> Self {
+        MutexFut{state, mutex}
     }
 }
 
 impl<T: ?Sized> Drop for MutexFut<T> {
     fn drop(&mut self) {
-        if ! self.acquired {
-            if let &mut Some(ref mut rx) = &mut self.receiver {
+        match &mut self.state {
+            &mut FutState::New => {
+                // Mutex hasn't yet been modified; nothing to do
+            },
+            &mut FutState::Pending(ref mut rx) => {
                 rx.close();
                 // TODO: futures-0.2.0 introduces a try_recv method that is
                 // better to use here than poll.  Use it after upgrading to
@@ -71,10 +73,9 @@ impl<T: ?Sized> Drop for MutexFut<T> {
                         // Never received ownership of the mutex
                     }
                 }
-            } else {
-                // Even though the future was immediately ready, it never got
-                // polled.
-                self.mutex.unlock();
+            },
+            &mut FutState::Acquired => {
+                // The MutexGuard will take care of releasing the Mutex
             }
         }
     }
@@ -85,23 +86,43 @@ impl<T> Future for MutexFut<T> {
     type Error = ();
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        if self.receiver.is_none() {
-            self.acquired = true;
-            Ok(Async::Ready(MutexGuard{mutex: self.mutex.clone()}))
-        } else {
-            match self.receiver.poll() {
-                Ok(Async::NotReady) => return Ok(Async::NotReady),
-                // It's impossible for receiver.poll() to return an error.  The
-                // only way that would happen is if the sender got dropped.  But
-                // that can't happen because the RwLock owns the sender, and the
-                // Fut retains a clone of the RwLock
-                Err(_) => unreachable!(),
-                Ok(Async::Ready(_)) => {
-                    self.acquired = true;
-                    Ok(Async::Ready(MutexGuard{mutex: self.mutex.clone()}))
+        let (result, new_state) = match &mut self.state {
+            &mut FutState::New => {
+                let mut mtx_data = self.mutex.inner.mutex.lock()
+                    .expect("sync::Mutex::lock");
+                if mtx_data.owned {
+                    let (tx, mut rx) = oneshot::channel::<()>();
+                    mtx_data.waiters.push_back(tx);
+                    // Even though we know it isn't ready, we need to poll the
+                    // receiver in order to register our task for notification.
+                    assert!(rx.poll().unwrap().is_not_ready());
+                    (Ok(Async::NotReady), FutState::Pending(rx))
+                } else {
+                    mtx_data.owned = true;
+                    let guard = MutexGuard{mutex: self.mutex.clone()};
+                    (Ok(Async::Ready(guard)), FutState::Acquired)
                 }
-            }
-        }
+            },
+            &mut FutState::Pending(ref mut rx) => {
+                match rx.poll() {
+                    Ok(Async::NotReady) => return Ok(Async::NotReady),
+                    // It's impossible for receiver.poll() to return an error.
+                    // The only way that would happen is if the sender got
+                    // dropped.  But that can't happen because the Mutex owns
+                    // the sender, and the Fut retains a clone of the Mutex
+                    Err(_) => unreachable!(),
+                    Ok(Async::Ready(_)) => {
+                        let state = FutState::Acquired;
+                        let result = Ok(Async::Ready(
+                                MutexGuard{mutex: self.mutex.clone()}));
+                        (result, state)
+                    }  //LCOV_EXCL_LINE    kcov false negative
+                }
+            },
+            &mut FutState::Acquired => panic!("Double-poll of ready Future")
+        };
+        self.state = new_state;
+        result
     }
 }
 
@@ -224,15 +245,7 @@ impl<T: ?Sized> Mutex<T> {
     /// returned `Future` is ready, this task will have sole access to the
     /// protected data.
     pub fn lock(&self) -> MutexFut<T> {
-        let mut mtx_data = self.inner.mutex.lock().expect("sync::Mutex::lock");
-        if mtx_data.owned {
-            let (tx, rx) = oneshot::channel::<()>();
-            mtx_data.waiters.push_back(tx);
-            return MutexFut::new(Some(rx), self.clone());
-        } else {
-            mtx_data.owned = true;
-            return MutexFut::new(None, self.clone())
-        }
+        MutexFut::new(FutState::New, self.clone())
     }
 
     /// Attempts to acquire the lock.

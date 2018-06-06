@@ -14,38 +14,24 @@ mod mutex {
 use super::*;
 use futures::{Future, Stream};
 
-// When an owned but not yet polled Mutex future is dropped, it should
-// relinquish ownership.  If not, deadlocks may result.
+// When a pending Mutex gets dropped, it should drain its channel and relinquish
+// ownership if a message was found.  If not, deadlocks may result.
 #[test]
 fn drop_before_poll() {
     let mutex = Mutex::<u32>::new(0);
 
     let _ = current_thread::block_on_all(lazy(|| {
-        let mut fut1 = mutex.lock(); // fut1 immediately gets ownership
-        let guard1 = fut1.poll().unwrap();
+        let mut fut1 = mutex.lock();
+        let guard1 = fut1.poll();    // fut1 immediately gets ownership
+        assert!(guard1.as_ref().unwrap().is_ready());
         let mut fut2 = mutex.lock();
         assert!(!fut2.poll().unwrap().is_ready());
         drop(guard1);                // ownership transfers to fut2
         drop(fut1);
         drop(fut2);                  // relinquish ownership
-        let mut fut3 = mutex.lock(); // fut3 immediately gets ownership
-        assert!(fut3.poll().unwrap().is_ready());
-        future::ok::<(), ()>(())
-    }));
-}
-
-// When an owned but not yet polled Mutex future is dropped, it should
-// relinquish ownership.  If not, deadlocks may result.
-#[test]
-fn drop_immediately_ready_before_poll() {
-    let mutex = Mutex::<u32>::new(0);
-
-    let _ = current_thread::block_on_all(lazy(|| {
-        let fut1 = mutex.lock();        // fut1 immediately gets ownership
-        let mut fut2 = mutex.lock();
-        assert!(!fut2.poll().unwrap().is_ready());
-        drop(fut1);                     // ownership transfers to fut2
-        assert!(fut2.poll().unwrap().is_ready());
+        let mut fut3 = mutex.lock();
+        let guard3 = fut3.poll();    // fut3 immediately gets ownership
+        assert!(guard3.as_ref().unwrap().is_ready());
         future::ok::<(), ()>(())
     }));
 }
@@ -132,6 +118,20 @@ fn lock_multithreaded() {
     assert_eq!(mutex.try_unwrap().expect("try_unwrap"), 17_000);
 }
 
+// Mutexes should be acquired in the order that their Futures are waited upon.
+#[test]
+fn lock_order() {
+    let mutex = Mutex::<Vec<u32>>::new(vec![]);
+    let fut2 = mutex.lock().map(|mut guard| guard.push(2));
+    let fut1 = mutex.lock().map(|mut guard| guard.push(1));
+
+    let r = current_thread::block_on_all(lazy(|| {
+        fut1.and_then(|_| fut2)
+    }));
+    assert!(r.is_ok());
+    assert_eq!(mutex.try_unwrap().unwrap(), vec![1, 2]);
+}
+
 // Acquire an uncontested Mutex with try_lock
 #[test]
 fn try_lock_uncontested() {
@@ -170,31 +170,17 @@ fn drop_exclusive_before_poll() {
     let rwlock = RwLock::<u32>::new(42);
 
     let _ = current_thread::block_on_all(lazy(|| {
-        let mut fut1 = rwlock.read();   // fut1 immediately gets ownership
-        let guard1 = fut1.poll().unwrap();
+        let mut fut1 = rwlock.read();
+        let guard1 = fut1.poll();       // fut1 immediately gets ownership
+        assert!(guard1.as_ref().unwrap().is_ready());
         let mut fut2 = rwlock.write();
         assert!(!fut2.poll().unwrap().is_ready());
-        drop(guard1);
-        drop(fut1);                     // ownership transfers to fut2
+        drop(guard1);                   // ownership transfers to fut2
+        //drop(fut1);
         drop(fut2);                     // relinquish ownership
-        let mut fut3 = rwlock.read();   // fut3 immediately gets ownership
-        assert!(fut3.poll().unwrap().is_ready());
-        future::ok::<(), ()>(())
-    }));
-}
-
-// When an exclusively owned but not yet polled RwLock future is dropped, it
-// should relinquish ownership.  If not, deadlocks may result.
-#[test]
-fn drop_exclusive_immediately_ready_before_poll() {
-    let rwlock = RwLock::<u32>::new(42);
-
-    let _ = current_thread::block_on_all(lazy(|| {
-        let fut1 = rwlock.write();      // fut1 immediately gets ownership
-        let mut fut2 = rwlock.read();
-        assert!(!fut2.poll().unwrap().is_ready());
-        drop(fut1);                     // ownership transfers to fut2
-        assert!(fut2.poll().unwrap().is_ready());
+        let mut fut3 = rwlock.read();
+        let guard3 = fut3.poll();       // fut3 immediately gets ownership
+        assert!(guard3.as_ref().unwrap().is_ready());
         future::ok::<(), ()>(())
     }));
 }
@@ -206,31 +192,17 @@ fn drop_shared_before_poll() {
     let rwlock = RwLock::<u32>::new(42);
 
     let _ = current_thread::block_on_all(lazy(|| {
-        let mut fut1 = rwlock.write();  // fut1 immediately gets ownership
-        let guard1 = fut1.poll().unwrap();
+        let mut fut1 = rwlock.write();
+        let guard1 = fut1.poll();       // fut1 immediately gets ownership
+        assert!(guard1.as_ref().unwrap().is_ready());
         let mut fut2 = rwlock.read();
         assert!(!fut2.poll().unwrap().is_ready());
-        drop(guard1);
-        drop(fut1);                     // ownership transfers to fut2
+        drop(guard1);                   // ownership transfers to fut2
+        //drop(fut1);
         drop(fut2);                     // relinquish ownership
-        let mut fut3 = rwlock.write();  // fut3 immediately gets ownership
-        assert!(fut3.poll().unwrap().is_ready());
-        future::ok::<(), ()>(())
-    }));
-}
-
-// When an nonexclusively owned but not yet polled RwLock future is dropped, it
-// should relinquish ownership.  If not, deadlocks may result.
-#[test]
-fn drop_shared_immediately_ready_before_poll() {
-    let rwlock = RwLock::<u32>::new(42);
-
-    let _ = current_thread::block_on_all(lazy(|| {
-        let fut1 = rwlock.read();       // fut1 immediately gets ownership
-        let mut fut2 = rwlock.write();
-        assert!(!fut2.poll().unwrap().is_ready());
-        drop(fut1);                     // ownership transfers to fut2
-        assert!(fut2.poll().unwrap().is_ready());
+        let mut fut3 = rwlock.write();
+        let guard3 = fut3.poll();       // fut3 immediately gets ownership
+        assert!(guard3.as_ref().unwrap().is_ready());
         future::ok::<(), ()>(())
     }));
 }
@@ -417,6 +389,20 @@ fn write_contested() {
     }));
 
     assert_eq!(result, Ok(((), 5, ())));
+}
+
+// RwLocks should be acquired in the order that their Futures are waited upon.
+#[test]
+fn write_order() {
+    let rwlock = RwLock::<Vec<u32>>::new(vec![]);
+    let fut2 = rwlock.write().map(|mut guard| guard.push(2));
+    let fut1 = rwlock.write().map(|mut guard| guard.push(1));
+
+    let r = current_thread::block_on_all(lazy(|| {
+        fut1.and_then(|_| fut2)
+    }));
+    assert!(r.is_ok());
+    assert_eq!(rwlock.try_unwrap().unwrap(), vec![1, 2]);
 }
 
 // A single RwLock is contested by tasks in multiple threads

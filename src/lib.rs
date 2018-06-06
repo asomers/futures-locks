@@ -15,3 +15,12 @@ mod rwlock;
 pub use mutex::{Mutex, MutexFut, MutexGuard};
 pub use rwlock::{RwLock, RwLockReadFut, RwLockWriteFut,
                  RwLockReadGuard, RwLockWriteGuard};
+
+use futures::sync::oneshot;
+
+/// Poll state of all Futures in this crate.
+enum FutState {
+    New,
+    Pending(oneshot::Receiver<()>),
+    Acquired
+}

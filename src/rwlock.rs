@@ -7,6 +7,7 @@ use std::clone::Clone;
 use std::collections::VecDeque;
 use std::ops::{Deref, DerefMut};
 use std::sync;
+use super::FutState;
 
 /// An RAII guard, much like `std::sync::RwLockReadGuard`.  The wrapped data can
 /// be accessed via its `Deref` implementation.
@@ -54,24 +55,25 @@ impl<T: ?Sized> Drop for RwLockWriteGuard<T> {
     }
 }
 
-/// A `Future` representation a pending `RwLock` shared acquisition.
+/// A `Future` representing a pending `RwLock` shared acquisition.
 pub struct RwLockReadFut<T: ?Sized> {
-    /// Has this Future already acquired the RwLock?
-    acquired: bool,
-    receiver: Option<oneshot::Receiver<()>>,
+    state: FutState,
     rwlock: RwLock<T>,
 }
 
 impl<T: ?Sized> RwLockReadFut<T> {
-    fn new(rx: Option<oneshot::Receiver<()>>, rwlock: RwLock<T>) -> Self {
-        RwLockReadFut{acquired: false, receiver: rx, rwlock}
+    fn new(state: FutState, rwlock: RwLock<T>) -> Self {
+        RwLockReadFut{state, rwlock}
     }
 }
 
 impl<T: ?Sized> Drop for RwLockReadFut<T> {
     fn drop(&mut self) {
-        if ! self.acquired {
-            if let &mut Some(ref mut rx) = &mut self.receiver {
+        match &mut self.state {
+            &mut FutState::New => {
+                // RwLock hasn't yet been modified; nothing to do
+            },
+            &mut FutState::Pending(ref mut rx) => {
                 rx.close();
                 // TODO: futures-0.2.0 introduces a try_recv method that is
                 // better to use here than poll.  Use it after upgrading to
@@ -91,10 +93,9 @@ impl<T: ?Sized> Drop for RwLockReadFut<T> {
                         // Never received ownership of the lock
                     }
                 }
-            } else {
-                // Even though the future was immediately ready, it never got
-                // polled.
-                self.rwlock.unlock_reader();
+            },
+            &mut FutState::Acquired => {
+                // The RwLockReadGuard will take care of releasing the RwLock
             }
         }
     }
@@ -105,46 +106,65 @@ impl<T> Future for RwLockReadFut<T> {
     type Error = ();
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        if self.receiver.is_none() {
-            self.acquired = true;
-            Ok(Async::Ready(RwLockReadGuard{rwlock: self.rwlock.clone()}))
-        } else {
-            match self.receiver.poll() {
-                Ok(Async::NotReady) => return Ok(Async::NotReady),
-                // It's impossible for receiver.poll() to return an error.  The
-                // only way that would happen is if the sender got dropped.  But
-                // that can't happen because the RwLock owns the sender, and the
-                // Fut retains a clone of the RwLock
-                Err(_) => unreachable!(),
-                Ok(Async::Ready(_)) => {
-                    self.acquired = true;
-                    Ok(Async::Ready(
-                        RwLockReadGuard{ rwlock: self.rwlock.clone() }
-                    ))
+        let (result, new_state) = match &mut self.state {
+            &mut FutState::New => {
+                let mut lock_data = self.rwlock.inner.mutex.lock()
+                    .expect("sync::Mutex::lock");
+                if lock_data.exclusive {
+                    let (tx, mut rx) = oneshot::channel::<()>();
+                    lock_data.read_waiters.push_back(tx);
+                    // Even though we know it isn't ready, we need to poll the
+                    // receiver in order to register our task for notification.
+                    assert!(rx.poll().unwrap().is_not_ready());
+                    (Ok(Async::NotReady), FutState::Pending(rx))
+                } else {
+                    lock_data.num_readers += 1;
+                    let guard = RwLockReadGuard{rwlock: self.rwlock.clone()};
+                    (Ok(Async::Ready(guard)), FutState::Acquired)
                 }
-            }
-        }
+            },
+            &mut FutState::Pending(ref mut rx) => {
+                match rx.poll() {
+                    Ok(Async::NotReady) => return Ok(Async::NotReady),
+                    // It's impossible for receiver.poll() to return an error.
+                    // The only way that would happen is if the sender got
+                    // dropped.  But that can't happen because the RwLock owns
+                    // the sender, and the Fut retains a clone of the RwLock.
+                    Err(_) => unreachable!(),
+                    Ok(Async::Ready(_)) => {
+                        let state = FutState::Acquired;
+                        let result = Ok(Async::Ready(
+                                RwLockReadGuard{rwlock: self.rwlock.clone()}));
+                        (result, state)
+                    }  // LCOV_EXCL_LINE   kcov false negative
+                }
+            },
+            &mut FutState::Acquired => panic!("Double-poll of ready Future")
+        };
+        self.state = new_state;
+        result
     }
 }
 
-/// A `Future` representation a pending `RwLock` exclusive acquisition.
+/// A `Future` representing a pending `RwLock` exclusive acquisition.
 pub struct RwLockWriteFut<T: ?Sized> {
-    /// Has this Future already acquired the RwLock?
-    acquired: bool,
-    receiver: Option<oneshot::Receiver<()>>,
+    state: FutState,
     rwlock: RwLock<T>,
 }
 
 impl<T: ?Sized> RwLockWriteFut<T> {
-    fn new(rx: Option<oneshot::Receiver<()>>, rwlock: RwLock<T>) -> Self {
-        RwLockWriteFut{acquired: false, receiver: rx, rwlock}
+    fn new(state: FutState, rwlock: RwLock<T>) -> Self {
+        RwLockWriteFut{state, rwlock}
     }
 }
 
 impl<T: ?Sized> Drop for RwLockWriteFut<T> {
     fn drop(&mut self) {
-        if ! self.acquired {
-            if let &mut Some(ref mut rx) = &mut self.receiver {
+        match &mut self.state {
+            &mut FutState::New => {
+                // RwLock hasn't yet been modified; nothing to do
+            },
+            &mut FutState::Pending(ref mut rx) => {
                 rx.close();
                 // TODO: futures-0.2.0 introduces a try_recv method that is
                 // better to use here than poll.  Use it after upgrading to
@@ -164,10 +184,9 @@ impl<T: ?Sized> Drop for RwLockWriteFut<T> {
                         // Never received ownership of the lock
                     }
                 }
-            } else {
-                // Even though the future was immediately ready, it never got
-                // polled.
-                self.rwlock.unlock_writer();
+            },
+            &mut FutState::Acquired => {
+                // The RwLockWriteGuard will take care of releasing the RwLock
             }
         }
     }
@@ -178,25 +197,43 @@ impl<T> Future for RwLockWriteFut<T> {
     type Error = ();
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        if self.receiver.is_none() {
-            self.acquired = true;
-            Ok(Async::Ready(RwLockWriteGuard{rwlock: self.rwlock.clone()}))
-        } else {
-            match self.receiver.poll() {
-                Ok(Async::NotReady) => return Ok(Async::NotReady),
-                // It's impossible for receiver.poll() to return an error.  The
-                // only way that would happen is if the sender got dropped.  But
-                // that can't happen because the RwLock owns the sender, and the
-                // Fut retains a clone of the RwLock
-                Err(_) => unreachable!(),
-                Ok(Async::Ready(_)) => {
-                    self.acquired = true;
-                    Ok(Async::Ready(
-                        RwLockWriteGuard{rwlock: self.rwlock.clone()}
-                    ))
+        let (result, new_state) = match &mut self.state {
+            &mut FutState::New => {
+                let mut lock_data = self.rwlock.inner.mutex.lock()
+                    .expect("sync::Mutex::lock");
+                if lock_data.exclusive || lock_data.num_readers > 0 {
+                    let (tx, mut rx) = oneshot::channel::<()>();
+                    lock_data.write_waiters.push_back(tx);
+                    // Even though we know it isn't ready, we need to poll the
+                    // receiver in order to register our task for notification.
+                    assert!(rx.poll().unwrap().is_not_ready());
+                    (Ok(Async::NotReady), FutState::Pending(rx))
+                } else {
+                    lock_data.exclusive = true;
+                    let guard = RwLockWriteGuard{rwlock: self.rwlock.clone()};
+                    (Ok(Async::Ready(guard)), FutState::Acquired)
                 }
-            }
-        }
+            },
+            &mut FutState::Pending(ref mut rx) => {
+                match rx.poll() {
+                    Ok(Async::NotReady) => return Ok(Async::NotReady),
+                    // It's impossible for receiver.poll() to return an error.
+                    // The only way that would happen is if the sender got
+                    // dropped.  But that can't happen because the RwLock owns
+                    // the sender, and the Fut retains a clone of the RwLock.
+                    Err(_) => unreachable!(),
+                    Ok(Async::Ready(_)) => {
+                        let state = FutState::Acquired;
+                        let result = Ok(Async::Ready(
+                                RwLockWriteGuard{rwlock: self.rwlock.clone()}));
+                        (result, state)
+                    }  // LCOV_EXCL_LINE   kcov false negative
+                }
+            },
+            &mut FutState::Acquired => panic!("Double-poll of ready Future")
+        };
+        self.state = new_state;
+        result
     }
 }
 
@@ -331,15 +368,7 @@ impl<T: ?Sized> RwLock<T> {
     ///
     /// ```
     pub fn read(&self) -> RwLockReadFut<T> {
-        let mut lock_data = self.inner.mutex.lock().expect("sync::Mutex::lock");
-        if lock_data.exclusive {
-            let (tx, rx) = oneshot::channel::<()>();
-            lock_data.read_waiters.push_back(tx);
-            return RwLockReadFut::new(Some(rx), self.clone());
-        } else {
-            lock_data.num_readers += 1;
-            return RwLockReadFut::new(None, self.clone())
-        }
+        return RwLockReadFut::new(FutState::New, self.clone())
     }
 
     /// Acquire the `RwLock` exclusively, read-write, blocking the task in the
@@ -364,15 +393,7 @@ impl<T: ?Sized> RwLock<T> {
     ///
     /// ```
     pub fn write(&self) -> RwLockWriteFut<T> {
-        let mut lock_data = self.inner.mutex.lock().expect("sync::Mutex::lock");
-        if lock_data.exclusive || lock_data.num_readers > 0 {
-            let (tx, rx) = oneshot::channel::<()>();
-            lock_data.write_waiters.push_back(tx);
-            return RwLockWriteFut::new(Some(rx), self.clone());
-        } else {
-            lock_data.exclusive = true;
-            return RwLockWriteFut::new(None, self.clone())
-        }
+        return RwLockWriteFut::new(FutState::New, self.clone())
     }
 
     /// Attempts to acquire the `RwLock` nonexclusively.
