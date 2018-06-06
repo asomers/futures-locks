@@ -20,18 +20,6 @@ impl<T: ?Sized> Drop for MutexGuard<T> {
     }
 }
 
-/// A `Future` representation a pending `Mutex` acquisition.
-pub struct MutexFut<T: ?Sized> {
-    receiver: Option<oneshot::Receiver<()>>,
-    mutex: Mutex<T>,
-}
-
-impl<T: ?Sized> MutexFut<T> {
-    fn new(rx: Option<oneshot::Receiver<()>>, mutex: Mutex<T>) -> Self {
-        MutexFut{receiver: rx, mutex}
-    }
-}
-
 impl<T: ?Sized> Deref for MutexGuard<T> {
     type Target = T;
 
@@ -43,6 +31,18 @@ impl<T: ?Sized> Deref for MutexGuard<T> {
 impl<T: ?Sized> DerefMut for MutexGuard<T> {
     fn deref_mut(&mut self) -> &mut T {
         unsafe {&mut *self.mutex.inner.data.get()}
+    }
+}
+
+/// A `Future` representation a pending `Mutex` acquisition.
+pub struct MutexFut<T: ?Sized> {
+    receiver: Option<oneshot::Receiver<()>>,
+    mutex: Mutex<T>,
+}
+
+impl<T: ?Sized> MutexFut<T> {
+    fn new(rx: Option<oneshot::Receiver<()>>, mutex: Mutex<T>) -> Self {
+        MutexFut{receiver: rx, mutex}
     }
 }
 
