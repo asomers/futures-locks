@@ -72,21 +72,25 @@ fn lock_contested() {
     let mutex = Mutex::<u32>::new(0);
 
     let result = current_thread::block_on_all(lazy(|| {
-        let (tx, rx) = oneshot::channel::<()>();
+        let (tx0, rx0) = oneshot::channel::<()>();
+        let (tx1, rx1) = oneshot::channel::<()>();
         let task0 = mutex.lock()
             .and_then(move |mut guard| {
                 *guard += 5;
-                rx.map_err(|_| ())
+                rx0.map_err(|_| {drop(guard);})
             });
         let task1 = mutex.lock().map(|guard| *guard);
-        let task2 = lazy(move || {
-            tx.send(()).unwrap();
+        // Readying task2 before task1 causes Tokio to poll the latter even
+        // though it's not ready
+        let task2 = rx1.map_err(|_| ()).map(|_| tx0.send(()).unwrap());
+        let task3 = lazy(move || {
+            tx1.send(()).unwrap();
             future::ok::<(), ()>(())
         });
-        task0.join3(task1, task2)
+        task0.join4(task1, task2, task3)
     }));
 
-    assert_eq!(result, Ok(((), 5, ())));
+    assert_eq!(result, Ok(((), 5, (), ())));
 }
 
 // A single Mutex is contested by tasks in multiple threads
@@ -267,22 +271,26 @@ fn read_contested() {
     let rwlock = RwLock::<u32>::new(0);
 
     let result = current_thread::block_on_all(lazy(|| {
-        let (tx, rx) = oneshot::channel::<()>();
+        let (tx0, rx0) = oneshot::channel::<()>();
+        let (tx1, rx1) = oneshot::channel::<()>();
         let task0 = rwlock.write()
             .and_then(move |mut guard| {
                 *guard += 5;
-                rx.map_err(|_| ())
+                rx0.map_err(|_| {drop(guard);})
             });
         let task1 = rwlock.read().map(|guard| *guard);
         let task2 = rwlock.read().map(|guard| *guard);
-        let task3 = lazy(move || {
-            tx.send(()).unwrap();
+        // Readying task3 before task1 and task2 causes Tokio to poll the latter
+        // even though they're not ready
+        let task3 = rx1.map_err(|_| ()).map(|_| tx0.send(()).unwrap());
+        let task4 = lazy(move || {
+            tx1.send(()).unwrap();
             future::ok::<(), ()>(())
         });
-        task0.join4(task1, task2, task3)
+        task0.join5(task1, task2, task3, task4)
     }));
 
-    assert_eq!(result, Ok(((), 5, 5, ())));
+    assert_eq!(result, Ok(((), 5, 5, (), ())));
 }
 
 // Attempt to acquire an rwlock exclusively when it already has a reader.
@@ -300,21 +308,25 @@ fn read_write_contested() {
     let rwlock = RwLock::<u32>::new(42);
 
     let result = current_thread::block_on_all(lazy(|| {
-        let (tx, rx) = oneshot::channel::<()>();
+        let (tx0, rx0) = oneshot::channel::<()>();
+        let (tx1, rx1) = oneshot::channel::<()>();
         let task0 = rwlock.read()
             .and_then(move |guard| {
-                rx.map(move |_| { *guard }).map_err(|_| ())
+                rx0.map(move |_| { *guard }).map_err(|_| ())
             });
         let task1 = rwlock.write().map(|mut guard| *guard += 1);
         let task2 = rwlock.read().map(|guard| *guard);
-        let task3 = lazy(move || {
-            tx.send(()).unwrap();
+        // Readying task3 before task1 and task2 causes Tokio to poll the latter
+        // even though they're not ready
+        let task3 = rx1.map_err(|_| ()).map(|_| tx0.send(()).unwrap());
+        let task4 = lazy(move || {
+            tx1.send(()).unwrap();
             future::ok::<(), ()>(())
         });
-        task0.join4(task1, task2, task3)
+        task0.join5(task1, task2, task3, task4)
     }));
 
-    assert_eq!(result, Ok((42, (), 42, ())));
+    assert_eq!(result, Ok((42, (), 42, (), ())));
     assert_eq!(rwlock.try_unwrap().expect("try_unwrap"), 43);
 }
 
@@ -374,21 +386,25 @@ fn write_contested() {
     let rwlock = RwLock::<u32>::new(0);
 
     let result = current_thread::block_on_all(lazy(|| {
-        let (tx, rx) = oneshot::channel::<()>();
+        let (tx0, rx0) = oneshot::channel::<()>();
+        let (tx1, rx1) = oneshot::channel::<()>();
         let task0 = rwlock.write()
             .and_then(move |mut guard| {
                 *guard += 5;
-                rx.map_err(|_| ())
+                rx0.map_err(|_| {drop(guard);})
             });
         let task1 = rwlock.write().map(|guard| *guard);
-        let task2 = lazy(move || {
-            tx.send(()).unwrap();
+        // Readying task2 before task1 causes Tokio to poll the latter
+        // even though it's not ready
+        let task2 = rx1.map_err(|_| ()).map(|_| tx0.send(()).unwrap());
+        let task3 = lazy(move || {
+            tx1.send(()).unwrap();
             future::ok::<(), ()>(())
         });
-        task0.join3(task1, task2)
+        task0.join4(task1, task2, task3)
     }));
 
-    assert_eq!(result, Ok(((), 5, ())));
+    assert_eq!(result, Ok(((), 5, (), ())));
 }
 
 // RwLocks should be acquired in the order that their Futures are waited upon.
