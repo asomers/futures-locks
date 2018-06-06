@@ -51,7 +51,7 @@ impl<T: ?Sized> MutexFut<T> {
 impl<T: ?Sized> Drop for MutexFut<T> {
     fn drop(&mut self) {
         if ! self.acquired {
-            if let Some(ref mut rx) = &mut self.receiver {
+            if let &mut Some(ref mut rx) = &mut self.receiver {
                 rx.close();
                 // TODO: futures-0.2.0 introduces a try_recv method that is
                 // better to use here than poll.  Use it after upgrading to
