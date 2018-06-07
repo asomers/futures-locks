@@ -1,6 +1,5 @@
 ## [0.1.1] - 2018-06-07
 ### Added
-- Implemented `Borrow` and `BorrowMut` for `DivBuf` and `DivBufMut`
 
 ### Changed
 - Futures should do nothing until polled.
