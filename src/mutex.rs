@@ -1,6 +1,8 @@
 // vim: tw=80
 
 use futures::{Async, Future, Poll};
+#[cfg(feature = "tokio")] use futures::future;
+#[cfg(feature = "tokio")] use futures::future::IntoFuture;
 use futures::sync::oneshot;
 use std::cell::UnsafeCell;
 use std::clone::Clone;
@@ -8,6 +10,7 @@ use std::collections::VecDeque;
 use std::ops::{Deref, DerefMut};
 use std::sync;
 use super::FutState;
+#[cfg(feature = "tokio")] use tokio::executor::current_thread;
 
 /// An RAII mutex guard, much like `std::sync::MutexGuard`.  The wrapped data
 /// can be accessed via its `Deref` and `DerefMut` implementations.
@@ -286,6 +289,63 @@ impl<T: ?Sized> Mutex<T> {
             // Relinquish ownership
             mtx_data.owned = false;
         }
+    }
+}
+
+impl<T: 'static + ?Sized> Mutex<T> {
+    /// Acquires a `Mutex` and performs a computation on its guarded value in a
+    /// separate task.  Returns a `Future` containing the result of the
+    /// computation.
+    ///
+    /// When using Tokio, this method will often hold the `Mutex` for less time
+    /// than chaining a computation to [`lock`](#method.lock).  The reason is
+    /// that Tokio polls all tasks promptly upon notification.  However, Tokio
+    /// does not guarantee that it will poll all futures promptly when their
+    /// owning task gets notified.  So it's best to hold `Mutex`es within their
+    /// own tasks, lest their continuations get blocked by slow stacked
+    /// combinators.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate futures;
+    /// # extern crate futures_locks;
+    /// # extern crate tokio;
+    /// # use futures_locks::*;
+    /// # use futures::{Future, IntoFuture, lazy};
+    /// # use tokio::executor::current_thread;
+    /// # fn main() {
+    /// let mtx = Mutex::<u32>::new(0);
+    /// let r = current_thread::block_on_all(lazy(|| {
+    ///     mtx.with(|mut guard| {
+    ///         *guard += 5;
+    ///         Ok(()) as Result<(), ()>
+    ///     })
+    ///     .map(|_| assert_eq!(mtx.try_unwrap().unwrap(), 5))
+    /// }));
+    /// assert!(r.is_ok());
+    /// # }
+    /// ```
+    #[cfg(feature = "tokio")]
+    pub fn with<F, B, R, E>(&self, f: F) -> oneshot::Receiver<Result<R, E>>
+        where F: FnOnce(MutexGuard<T>) -> B + 'static,
+              B: IntoFuture<Item = R, Error = E> + 'static,
+              R: 'static,
+              E: 'static
+    {
+        let (tx, rx) = oneshot::channel::<Result<R, E>>();
+        current_thread::spawn(self.lock()
+            .and_then(move |data| {
+                f(data).into_future()
+                       .then(move |result| {
+                           // Swallow errors; there's nothing to do if the
+                           // receiver got cancelled
+                           let _ = tx.send(result);
+                           future::ok::<(), ()>(())
+                       })
+            })
+        );
+        rx
     }
 }
 

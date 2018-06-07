@@ -1,6 +1,8 @@
 // vim: tw=80
 
 use futures::{Async, Future, Poll};
+#[cfg(feature = "tokio")] use futures::future;
+#[cfg(feature = "tokio")] use futures::future::IntoFuture;
 use futures::sync::oneshot;
 use std::cell::UnsafeCell;
 use std::clone::Clone;
@@ -8,6 +10,7 @@ use std::collections::VecDeque;
 use std::ops::{Deref, DerefMut};
 use std::sync;
 use super::FutState;
+#[cfg(feature = "tokio")] use tokio::executor::current_thread;
 
 /// An RAII guard, much like `std::sync::RwLockReadGuard`.  The wrapped data can
 /// be accessed via its `Deref` implementation.
@@ -483,6 +486,119 @@ impl<T: ?Sized> RwLock<T> {
                 tx.send(()).expect("Sender::send");
             }
         }
+    }
+}
+
+impl<T: 'static + ?Sized> RwLock<T> {
+    /// Acquires a `RwLock` nonexclusively and performs a computation on its
+    /// guarded value in a separate task.  Returns a `Future` containing the
+    /// result of the computation.
+    ///
+    /// When using Tokio, this method will often hold the `RwLock` for less time
+    /// than chaining a computation to [`read`](#method.read).  The reason is
+    /// that Tokio polls all tasks promptly upon notification.  However, Tokio
+    /// does not guarantee that it will poll all futures promptly when their
+    /// owning task gets notified.  So it's best to hold `RwLock`s within their
+    /// own tasks, lest their continuations get blocked by slow stacked
+    /// combinators.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate futures;
+    /// # extern crate futures_locks;
+    /// # extern crate tokio;
+    /// # use futures_locks::*;
+    /// # use futures::{Future, IntoFuture, lazy};
+    /// # use tokio::executor::current_thread;
+    /// # fn main() {
+    /// let mtx = RwLock::<u32>::new(5);
+    /// let r = current_thread::block_on_all(lazy(|| {
+    ///     mtx.with_read(|mut guard| {
+    ///         Ok(*guard) as Result<u32, ()>
+    ///     })
+    ///     .map(|r| assert_eq!(r, Ok(5)))
+    /// }));
+    /// assert!(r.is_ok());
+    /// # }
+    /// ```
+    #[cfg(feature = "tokio")]
+    pub fn with_read<F, B, R, E>(&self, f: F)
+        -> oneshot::Receiver<Result<R, E>>
+        where F: FnOnce(RwLockReadGuard<T>) -> B + 'static,
+              B: IntoFuture<Item = R, Error = E> + 'static,
+              R: 'static,
+              E: 'static
+    {
+        let (tx, rx) = oneshot::channel::<Result<R, E>>();
+        current_thread::spawn(self.read()
+            .and_then(move |data| {
+                f(data).into_future()
+                       .then(move |result| {
+                           // Swallow errors; there's nothing to do if the
+                           // receiver got cancelled
+                           let _ = tx.send(result);
+                           future::ok::<(), ()>(())
+                       })
+            })
+        );
+        rx
+    }
+
+    /// Acquires a `RwLock` exclusively and performs a computation on its
+    /// guarded value in a separate task.  Returns a `Future` containing the
+    /// result of the computation.
+    ///
+    /// When using Tokio, this method will often hold the `RwLock` for less time
+    /// than chaining a computation to [`write`](#method.write).  The reason is
+    /// that Tokio polls all tasks promptly upon notification.  However, Tokio
+    /// does not guarantee that it will poll all futures promptly when their
+    /// owning task gets notified.  So it's best to hold `RwLock`s within their
+    /// own tasks, lest their continuations get blocked by slow stacked
+    /// combinators.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate futures;
+    /// # extern crate futures_locks;
+    /// # extern crate tokio;
+    /// # use futures_locks::*;
+    /// # use futures::{Future, IntoFuture, lazy};
+    /// # use tokio::executor::current_thread;
+    /// # fn main() {
+    /// let mtx = RwLock::<u32>::new(0);
+    /// let r = current_thread::block_on_all(lazy(|| {
+    ///     mtx.with_write(|mut guard| {
+    ///         *guard += 5;
+    ///         Ok(()) as Result<(), ()>
+    ///     })
+    ///     .map(|_| assert_eq!(mtx.try_unwrap().unwrap(), 5))
+    /// }));
+    /// assert!(r.is_ok());
+    /// # }
+    /// ```
+    #[cfg(feature = "tokio")]
+    pub fn with_write<F, B, R, E>(&self, f: F)
+        -> oneshot::Receiver<Result<R, E>>
+        where F: FnOnce(RwLockWriteGuard<T>) -> B + 'static,
+              B: IntoFuture<Item = R, Error = E> + 'static,
+              R: 'static,
+              E: 'static
+    {
+        let (tx, rx) = oneshot::channel::<Result<R, E>>();
+        current_thread::spawn(self.write()
+            .and_then(move |data| {
+                f(data).into_future()
+                       .then(move |result| {
+                           // Swallow errors; there's nothing to do if the
+                           // receiver got cancelled
+                           let _ = tx.send(result);
+                           future::ok::<(), ()>(())
+                       })
+            })
+        );
+        rx
     }
 }
 

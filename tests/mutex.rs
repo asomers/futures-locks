@@ -153,3 +153,33 @@ fn try_unwrap_multiply_referenced() {
     let _mtx2 = mtx.clone();
     assert!(mtx.try_unwrap().is_err());
 }
+
+#[cfg(feature = "tokio")]
+#[test]
+fn with_err() {
+    let mtx = Mutex::<i32>::new(-5);
+    let r = current_thread::block_on_all(lazy(|| {
+        let fut = mtx.with(|guard| {
+            if *guard > 0 {
+                Ok(*guard)
+            } else {
+                Err("Whoops!")
+            }
+        });
+        fut.map(|r| assert_eq!(r, Err("Whoops!")))
+    }));
+    assert!(r.is_ok());
+}
+
+#[cfg(feature = "tokio")]
+#[test]
+fn with_ok() {
+    let mtx = Mutex::<i32>::new(5);
+    let r = current_thread::block_on_all(lazy(|| {
+        let fut = mtx.with(|guard| {
+            Ok(*guard) as Result<i32, ()>
+        });
+        fut.map(|r| assert_eq!(r, Ok(5)))
+    }));
+    assert!(r.is_ok());
+}

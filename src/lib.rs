@@ -8,6 +8,7 @@
 //! [`Tokio`]: https:/tokio.rs
 
 extern crate futures;
+#[cfg(feature = "tokio")] extern crate tokio;
 
 mod mutex;
 mod rwlock;

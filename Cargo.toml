@@ -19,6 +19,7 @@ autotests = false
 
 [dependencies]
 futures = "0.1.20"
+tokio = { version = "0.1.4", optional = true }
 
 [dev-dependencies]
 tokio = "0.1.4"

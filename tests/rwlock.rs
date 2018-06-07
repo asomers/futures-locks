@@ -297,3 +297,65 @@ fn multithreaded() {
     tokio::run(parent);
     assert_eq!(rwlock.try_unwrap().expect("try_unwrap"), 17_000);
 }
+
+#[cfg(feature = "tokio")]
+#[test]
+fn with_read_err() {
+    let mtx = RwLock::<i32>::new(-5);
+    let r = current_thread::block_on_all(lazy(|| {
+        let fut = mtx.with_read(|guard| {
+            if *guard > 0 {
+                Ok(*guard)
+            } else {
+                Err("Whoops!")
+            }
+        });
+        fut.map(|r| assert_eq!(r, Err("Whoops!")))
+    }));
+    assert!(r.is_ok());
+}
+
+#[cfg(feature = "tokio")]
+#[test]
+fn with_read_ok() {
+    let mtx = RwLock::<i32>::new(5);
+    let r = current_thread::block_on_all(lazy(|| {
+        let fut = mtx.with_read(|guard| {
+            Ok(*guard) as Result<i32, ()>
+        });
+        fut.map(|r| assert_eq!(r, Ok(5)))
+    }));
+    assert!(r.is_ok());
+}
+
+#[cfg(feature = "tokio")]
+#[test]
+fn with_write_err() {
+    let mtx = RwLock::<i32>::new(-5);
+    let r = current_thread::block_on_all(lazy(|| {
+        let fut = mtx.with_write(|mut guard| {
+            if *guard > 0 {
+                *guard -= 1;
+                Ok(())
+            } else {
+                Err("Whoops!")
+            }
+        });
+        fut.map(|r| assert_eq!(r, Err("Whoops!")))
+    }));
+    assert!(r.is_ok());
+}
+
+#[cfg(feature = "tokio")]
+#[test]
+fn with_write_ok() {
+    let mtx = RwLock::<i32>::new(5);
+    let r = current_thread::block_on_all(lazy(|| {
+        let fut = mtx.with_write(|mut guard| {
+            *guard += 1;
+            Ok(()) as Result<(), ()>
+        });
+        fut.map(|_| assert_eq!(mtx.try_unwrap().unwrap(), 6))
+    }));
+    assert!(r.is_ok());
+}
