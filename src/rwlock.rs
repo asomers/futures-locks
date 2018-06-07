@@ -101,7 +101,7 @@ impl<T: ?Sized> Drop for RwLockReadFut<T> {
     }
 }
 
-impl<T> Future for RwLockReadFut<T> {
+impl<T: ?Sized> Future for RwLockReadFut<T> {
     type Item = RwLockReadGuard<T>;
     type Error = ();
 
@@ -192,7 +192,7 @@ impl<T: ?Sized> Drop for RwLockWriteFut<T> {
     }
 }
 
-impl<T> Future for RwLockWriteFut<T> {
+impl<T: ?Sized> Future for RwLockWriteFut<T> {
     type Item = RwLockWriteGuard<T>;
     type Error = ();
 

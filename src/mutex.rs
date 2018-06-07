@@ -81,7 +81,7 @@ impl<T: ?Sized> Drop for MutexFut<T> {
     }
 }
 
-impl<T> Future for MutexFut<T> {
+impl<T: ?Sized> Future for MutexFut<T> {
     type Item = MutexGuard<T>;
     type Error = ();
 

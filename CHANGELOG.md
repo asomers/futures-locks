@@ -1,3 +1,8 @@
+## [Unreleased] - ReleaseDate
+### Added
+- Implemented `Future` for all future types, even when the wrapped type is
+  unsized.
+
 ## [0.1.1] - 2018-06-07
 ### Added
 
