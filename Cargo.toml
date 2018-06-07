@@ -15,9 +15,14 @@ exclude = [
 	".travis.yml",
 	"release.toml"
 ]
+autotests = false
 
 [dependencies]
 futures = "0.1.20"
 
 [dev-dependencies]
 tokio = "0.1.4"
+
+[[test]]
+name = "functional"
+path = "tests/test.rs"
