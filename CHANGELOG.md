@@ -1,4 +1,4 @@
-## [Unreleased] - ReleaseDate
+## [0.2.1] - 2018-06-18
 ### Changed
 - Tokio support is now enabled by default.
 
