@@ -14,7 +14,7 @@ a single task, not the entire reactor.
 # Cargo.toml
 [dependencies]
 futures = "0.1.20"
-futures-locks = "0.1"
+futures-locks = "0.2"
 ```
 
 # Usage
