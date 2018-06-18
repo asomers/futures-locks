@@ -297,6 +297,9 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// separate task.  Returns a `Future` containing the result of the
     /// computation.
     ///
+    /// *This method requires Futures-locks to be build with the `"tokio"`
+    /// feature.*
+    ///
     /// When using Tokio, this method will often hold the `Mutex` for less time
     /// than chaining a computation to [`lock`](#method.lock).  The reason is
     /// that Tokio polls all tasks promptly upon notification.  However, Tokio

@@ -1,3 +1,7 @@
+## [Unreleased] - ReleaseDate
+### Changed
+- Tokio support is now enabled by default.
+
 ## [0.2.0] - 2018-06-18
 ### Added
 - Added methods for running critical code in its own task.  These methods

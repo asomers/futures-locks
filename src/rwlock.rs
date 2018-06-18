@@ -494,6 +494,9 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// guarded value in a separate task.  Returns a `Future` containing the
     /// result of the computation.
     ///
+    /// *This method requires Futures-locks to be build with the `"tokio"`
+    /// feature.*
+    ///
     /// When using Tokio, this method will often hold the `RwLock` for less time
     /// than chaining a computation to [`read`](#method.read).  The reason is
     /// that Tokio polls all tasks promptly upon notification.  However, Tokio
@@ -548,6 +551,9 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// Acquires a `RwLock` exclusively and performs a computation on its
     /// guarded value in a separate task.  Returns a `Future` containing the
     /// result of the computation.
+    ///
+    /// *This method requires Futures-locks to be build with the `"tokio"`
+    /// feature.*
     ///
     /// When using Tokio, this method will often hold the `RwLock` for less time
     /// than chaining a computation to [`write`](#method.write).  The reason is
