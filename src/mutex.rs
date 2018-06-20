@@ -327,14 +327,14 @@ impl<T: 'static + ?Sized> Mutex<T> {
     ///         *guard += 5;
     ///         Ok(()) as Result<(), ()>
     ///     }).unwrap()
-    ///     .map(|_| assert_eq!(mtx.try_unwrap().unwrap(), 5))
     /// }));
     /// assert!(r.is_ok());
+    /// assert_eq!(mtx.try_unwrap().unwrap(), 5);
     /// # }
     /// ```
     #[cfg(feature = "tokio")]
     pub fn with<F, B, R, E>(&self, f: F)
-        -> Result<oneshot::Receiver<Result<R, E>>, SpawnError>
+        -> Result<impl Future<Item = R, Error = E>, SpawnError>
         where F: FnOnce(MutexGuard<T>) -> B + Send + 'static,
               B: IntoFuture<Item = R, Error = E> + 'static,
               <B as IntoFuture>::Future: Send,
@@ -353,7 +353,9 @@ impl<T: 'static + ?Sized> Mutex<T> {
                            future::ok::<(), ()>(())
                        })
             })
-        )).map(|_| rx)
+            // We control the sender so we're sure it won't be dropped before
+            // sending so we can unwrap safely
+        )).map(|_| rx.then(Result::unwrap))
     }
 
     /// Like [`with`](#method.with) but for Futures that aren't `Send`.
@@ -381,14 +383,14 @@ impl<T: 'static + ?Sized> Mutex<T> {
     ///         *Rc::get_mut(&mut *guard).unwrap() += 5;
     ///         Ok(()) as Result<(), ()>
     ///     })
-    ///     .map(|_| assert_eq!(*mtx.try_unwrap().unwrap(), 5))
     /// }));
     /// assert!(r.is_ok());
+    /// assert_eq!(*mtx.try_unwrap().unwrap(), 5);
     /// # }
     /// ```
     #[cfg(feature = "tokio")]
     pub fn with_local<F, B, R, E>(&self, f: F)
-        -> oneshot::Receiver<Result<R, E>>
+        -> impl Future<Item = R, Error = E>
         where F: FnOnce(MutexGuard<T>) -> B + 'static,
               B: IntoFuture<Item = R, Error = E> + 'static,
               R: 'static,
@@ -406,7 +408,9 @@ impl<T: 'static + ?Sized> Mutex<T> {
                        })
             })
         );
-        rx
+        // We control the sender so we're sure it won't be dropped before
+        // sending so we can unwrap safely
+        rx.then(Result::unwrap)
     }
 }
 

@@ -165,16 +165,15 @@ fn with_err() {
     let mtx = Mutex::<i32>::new(-5);
     let mut rt = current_thread::Runtime::new().unwrap();
     let r = rt.block_on(lazy(|| {
-        let fut = mtx.with(|guard| {
+        mtx.with(|guard| {
             if *guard > 0 {
                 Ok(*guard)
             } else {
                 Err("Whoops!")
             }
-        }).unwrap();
-        fut.map(|r| assert_eq!(r, Err("Whoops!")))
+        }).unwrap()
     }));
-    assert!(r.is_ok());
+    assert_eq!(r, Err("Whoops!"));
 }
 
 #[cfg(feature = "tokio")]
@@ -183,12 +182,11 @@ fn with_ok() {
     let mtx = Mutex::<i32>::new(5);
     let mut rt = current_thread::Runtime::new().unwrap();
     let r = rt.block_on(lazy(move || {
-        let fut = mtx.with(|guard| {
+        mtx.with(|guard| {
             Ok(*guard) as Result<i32, ()>
-        }).unwrap();
-        fut.map(|r| assert_eq!(r, Ok(5)))
+        }).unwrap()
     }));
-    assert!(r.is_ok());
+    assert_eq!(r, Ok(5));
 }
 
 // Mutex::with should work with multithreaded Runtimes as well as
@@ -200,12 +198,11 @@ fn with_threadpool() {
     let mtx = Mutex::<i32>::new(5);
     let mut rt = runtime::Runtime::new().unwrap();
     let r = rt.block_on(lazy(move || {
-        let fut = mtx.with(|guard| {
+        mtx.with(|guard| {
             Ok(*guard) as Result<i32, ()>
-        }).unwrap();
-        fut.map(|r| assert_eq!(r, Ok(5)))
+        }).unwrap()
     }));
-    assert!(r.is_ok());
+    assert_eq!(r, Ok(5));
 }
 
 #[cfg(feature = "tokio")]
@@ -215,10 +212,9 @@ fn with_local_ok() {
     let mtx = Mutex::<Rc<i32>>::new(Rc::new(5));
     let mut rt = current_thread::Runtime::new().unwrap();
     let r = rt.block_on(lazy(move || {
-        let fut = mtx.with_local(|guard| {
+        mtx.with_local(|guard| {
             Ok(**guard) as Result<i32, ()>
-        });
-        fut.map(|r| assert_eq!(r, Ok(5)))
+        })
     }));
-    assert!(r.is_ok());
+    assert_eq!(r, Ok(5));
 }

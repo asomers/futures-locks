@@ -315,16 +315,15 @@ fn with_read_err() {
     let mut rt = current_thread::Runtime::new().unwrap();
 
     let r = rt.block_on(lazy(move || {
-        let fut = mtx.with_read(|guard| {
+        mtx.with_read(|guard| {
             if *guard > 0 {
                 Ok(*guard)
             } else {
                 Err("Whoops!")
             }
-        }).unwrap();
-        fut.map(|r| assert_eq!(r, Err("Whoops!")))
+        }).unwrap()
     }));
-    assert!(r.is_ok());
+    assert_eq!(r, Err("Whoops!"));
 }
 
 #[cfg(feature = "tokio")]
@@ -334,12 +333,11 @@ fn with_read_ok() {
     let mut rt = current_thread::Runtime::new().unwrap();
 
     let r = rt.block_on(lazy(move || {
-        let fut = mtx.with_read(|guard| {
+        mtx.with_read(|guard| {
             Ok(*guard) as Result<i32, ()>
-        }).unwrap();
-        fut.map(|r| assert_eq!(r, Ok(5)))
+        }).unwrap()
     }));
-    assert!(r.is_ok());
+    assert_eq!(r, Ok(5));
 }
 
 // RwLock::with_read should work with multithreaded Runtimes as well as
@@ -352,12 +350,11 @@ fn with_read_threadpool() {
     let mut rt = runtime::Runtime::new().unwrap();
 
     let r = rt.block_on(lazy(move || {
-        let fut = mtx.with_read(|guard| {
+        mtx.with_read(|guard| {
             Ok(*guard) as Result<i32, ()>
-        }).unwrap();
-        fut.map(|r| assert_eq!(r, Ok(5)))
+        }).unwrap()
     }));
-    assert!(r.is_ok());
+    assert_eq!(r, Ok(5));
 }
 
 #[cfg(feature = "tokio")]
@@ -367,12 +364,11 @@ fn with_read_local_ok() {
     let rwlock = RwLock::<Rc<i32>>::new(Rc::new(5));
     let mut rt = current_thread::Runtime::new().unwrap();
     let r = rt.block_on(lazy(move || {
-        let fut = rwlock.with_read_local(|guard| {
+        rwlock.with_read_local(|guard| {
             Ok(**guard) as Result<i32, ()>
-        });
-        fut.map(|r| assert_eq!(r, Ok(5)))
+        })
     }));
-    assert!(r.is_ok());
+    assert_eq!(r, Ok(5));
 }
 
 #[cfg(feature = "tokio")]
@@ -382,17 +378,16 @@ fn with_write_err() {
     let mut rt = current_thread::Runtime::new().unwrap();
 
     let r = rt.block_on(lazy(move || {
-        let fut = mtx.with_write(|mut guard| {
+        mtx.with_write(|mut guard| {
             if *guard > 0 {
                 *guard -= 1;
                 Ok(())
             } else {
                 Err("Whoops!")
             }
-        }).unwrap();
-        fut.map(|r| assert_eq!(r, Err("Whoops!")))
+        }).unwrap()
     }));
-    assert!(r.is_ok());
+    assert_eq!(r, Err("Whoops!"));
 }
 
 #[cfg(feature = "tokio")]
@@ -402,13 +397,13 @@ fn with_write_ok() {
     let mut rt = current_thread::Runtime::new().unwrap();
 
     let r = rt.block_on(lazy(|| {
-        let fut = mtx.with_write(|mut guard| {
+        mtx.with_write(|mut guard| {
             *guard += 1;
             Ok(()) as Result<(), ()>
-        }).unwrap();
-        fut.map(|_| assert_eq!(mtx.try_unwrap().unwrap(), 6))
+        }).unwrap()
     }));
     assert!(r.is_ok());
+    assert_eq!(mtx.try_unwrap().unwrap(), 6);
 }
 
 // RwLock::with_write should work with multithreaded Runtimes as well as
@@ -418,16 +413,17 @@ fn with_write_ok() {
 #[test]
 fn with_write_threadpool() {
     let mtx = RwLock::<i32>::new(5);
+    let test_mtx = mtx.clone();
     let mut rt = runtime::Runtime::new().unwrap();
 
     let r = rt.block_on(lazy(move || {
-        let fut = mtx.with_write(|mut guard| {
+        mtx.with_write(|mut guard| {
             *guard += 1;
             Ok(()) as Result<(), ()>
-        }).unwrap();
-        fut.map(|_| assert_eq!(mtx.try_unwrap().unwrap(), 6))
+        }).unwrap()
     }));
     assert!(r.is_ok());
+    assert_eq!(test_mtx.try_unwrap().unwrap(), 6);
 }
 
 #[cfg(feature = "tokio")]
@@ -436,12 +432,12 @@ fn with_write_local_ok() {
     // Note: Rc is not Send
     let rwlock = RwLock::<Rc<i32>>::new(Rc::new(5));
     let mut rt = current_thread::Runtime::new().unwrap();
-    let r = rt.block_on(lazy(move || {
-        let fut = rwlock.with_write_local(|mut guard| {
+    let r = rt.block_on(lazy(|| {
+        rwlock.with_write_local(|mut guard| {
             *Rc::get_mut(&mut *guard).unwrap() += 1;
             Ok(()) as Result<(), ()>
-        });
-        fut.map(|_| assert_eq!(*rwlock.try_unwrap().unwrap(), 6))
+        })
     }));
     assert!(r.is_ok());
+    assert_eq!(*rwlock.try_unwrap().unwrap(), 6);
 }
