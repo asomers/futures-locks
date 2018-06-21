@@ -1,4 +1,9 @@
 ## [Unreleased] - ReleaseDate
+### Added
+- Added `Mutex::with_local`, `RwLock::with_read_local`, and
+  `RwLock::with_write_local` for non-`Send` Futures.
+  ([#7](https://github.com/asomers/futures-locks/pull/7))
+
 ### Changed
 - `Mutex::with`, `RwLock::with_read`, and `RwLock::with_write` now require
   their Futures to be `Send`.  They also can return errors.

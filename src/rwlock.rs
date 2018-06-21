@@ -12,6 +12,7 @@ use std::sync;
 use super::FutState;
 #[cfg(feature = "tokio")] use tokio;
 #[cfg(feature = "tokio")] use tokio::executor::{Executor, SpawnError};
+#[cfg(feature = "tokio")] use tokio::executor::current_thread;
 
 /// An RAII guard, much like `std::sync::RwLockReadGuard`.  The wrapped data can
 /// be accessed via its `Deref` implementation.
@@ -551,6 +552,59 @@ impl<T: 'static + ?Sized> RwLock<T> {
         )).map(|_| rx)
     }
 
+    /// Like [`with_read`](#method.with_read) but for Futures that aren't
+    /// `Send`.  Spawns a new task on a single-threaded Runtime to complete the
+    /// Future.
+    ///
+    /// *This method requires Futures-locks to be build with the `"tokio"`
+    /// feature.*
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate futures;
+    /// # extern crate futures_locks;
+    /// # extern crate tokio;
+    /// # use futures_locks::*;
+    /// # use futures::{Future, IntoFuture, lazy};
+    /// # use std::rc::Rc;
+    /// # use tokio::runtime::current_thread;
+    /// # fn main() {
+    /// // Note: Rc is not `Send`
+    /// let rwlock = RwLock::<Rc<u32>>::new(Rc::new(5));
+    /// let mut rt = current_thread::Runtime::new().unwrap();
+    /// let r = rt.block_on(lazy(|| {
+    ///     rwlock.with_read_local(|mut guard| {
+    ///         Ok(**guard) as Result<u32, ()>
+    ///     })
+    ///     .map(|r| assert_eq!(r, Ok(5)))
+    /// }));
+    /// assert!(r.is_ok());
+    /// # }
+    /// ```
+    #[cfg(feature = "tokio")]
+    pub fn with_read_local<F, B, R, E>(&self, f: F)
+        -> oneshot::Receiver<Result<R, E>>
+        where F: FnOnce(RwLockReadGuard<T>) -> B + 'static,
+              B: IntoFuture<Item = R, Error = E> + 'static,
+              R: 'static,
+              E: 'static
+    {
+        let (tx, rx) = oneshot::channel::<Result<R, E>>();
+        current_thread::spawn(self.read()
+            .and_then(move |data| {
+                f(data).into_future()
+                       .then(move |result| {
+                           // Swallow errors; there's nothing to do if the
+                           // receiver got cancelled
+                           let _ = tx.send(result);
+                           future::ok::<(), ()>(())
+                       })
+            })
+        );
+        rx
+    }
+
     /// Acquires a `RwLock` exclusively and performs a computation on its
     /// guarded value in a separate task.  Returns a `Future` containing the
     /// result of the computation.
@@ -610,6 +664,60 @@ impl<T: 'static + ?Sized> RwLock<T> {
                        })
             })
         )).map(|_| rx)
+    }
+
+    /// Like [`with_write`](#method.with_write) but for Futures that aren't
+    /// `Send`.  Spawns a new task on a single-threaded Runtime to complete the
+    /// Future.
+    ///
+    /// *This method requires Futures-locks to be build with the `"tokio"`
+    /// feature.*
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate futures;
+    /// # extern crate futures_locks;
+    /// # extern crate tokio;
+    /// # use futures_locks::*;
+    /// # use futures::{Future, IntoFuture, lazy};
+    /// # use std::rc::Rc;
+    /// # use tokio::runtime::current_thread;
+    /// # fn main() {
+    /// // Note: Rc is not `Send`
+    /// let rwlock = RwLock::<Rc<u32>>::new(Rc::new(0));
+    /// let mut rt = current_thread::Runtime::new().unwrap();
+    /// let r = rt.block_on(lazy(|| {
+    ///     rwlock.with_write_local(|mut guard| {
+    ///         *Rc::get_mut(&mut *guard).unwrap() += 5;
+    ///         Ok(()) as Result<(), ()>
+    ///     })
+    ///     .map(|_| assert_eq!(*rwlock.try_unwrap().unwrap(), 5))
+    /// }));
+    /// assert!(r.is_ok());
+    /// # }
+    /// ```
+    #[cfg(feature = "tokio")]
+    pub fn with_write_local<F, B, R, E>(&self, f: F)
+        -> oneshot::Receiver<Result<R, E>>
+        where F: FnOnce(RwLockWriteGuard<T>) -> B + 'static,
+              B: IntoFuture<Item = R, Error = E> + 'static,
+              R: 'static,
+              E: 'static
+    {
+        let (tx, rx) = oneshot::channel::<Result<R, E>>();
+        current_thread::spawn(self.write()
+            .and_then(move |data| {
+                f(data).into_future()
+                       .then(move |result| {
+                           // Swallow errors; there's nothing to do if the
+                           // receiver got cancelled
+                           let _ = tx.send(result);
+                           future::ok::<(), ()>(())
+                       })
+            })
+        );
+        rx
     }
 }
 

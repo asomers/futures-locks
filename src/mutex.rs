@@ -12,6 +12,7 @@ use std::sync;
 use super::FutState;
 #[cfg(feature = "tokio")] use tokio;
 #[cfg(feature = "tokio")] use tokio::executor::{Executor, SpawnError};
+#[cfg(feature = "tokio")] use tokio::executor::current_thread;
 
 /// An RAII mutex guard, much like `std::sync::MutexGuard`.  The wrapped data
 /// can be accessed via its `Deref` and `DerefMut` implementations.
@@ -353,6 +354,59 @@ impl<T: 'static + ?Sized> Mutex<T> {
                        })
             })
         )).map(|_| rx)
+    }
+
+    /// Like [`with`](#method.with) but for Futures that aren't `Send`.
+    /// Spawns a new task on a single-threaded Runtime to complete the Future.
+    ///
+    /// *This method requires Futures-locks to be build with the `"tokio"`
+    /// feature.*
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate futures;
+    /// # extern crate futures_locks;
+    /// # extern crate tokio;
+    /// # use futures_locks::*;
+    /// # use futures::{Future, IntoFuture, lazy};
+    /// # use std::rc::Rc;
+    /// # use tokio::runtime::current_thread;
+    /// # fn main() {
+    /// // Note: Rc is not `Send`
+    /// let mtx = Mutex::<Rc<u32>>::new(Rc::new(0));
+    /// let mut rt = current_thread::Runtime::new().unwrap();
+    /// let r = rt.block_on(lazy(|| {
+    ///     mtx.with_local(|mut guard| {
+    ///         *Rc::get_mut(&mut *guard).unwrap() += 5;
+    ///         Ok(()) as Result<(), ()>
+    ///     })
+    ///     .map(|_| assert_eq!(*mtx.try_unwrap().unwrap(), 5))
+    /// }));
+    /// assert!(r.is_ok());
+    /// # }
+    /// ```
+    #[cfg(feature = "tokio")]
+    pub fn with_local<F, B, R, E>(&self, f: F)
+        -> oneshot::Receiver<Result<R, E>>
+        where F: FnOnce(MutexGuard<T>) -> B + 'static,
+              B: IntoFuture<Item = R, Error = E> + 'static,
+              R: 'static,
+              E: 'static
+    {
+        let (tx, rx) = oneshot::channel::<Result<R, E>>();
+        current_thread::spawn(self.lock()
+            .and_then(move |data| {
+                f(data).into_future()
+                       .then(move |result| {
+                           // Swallow errors; there's nothing to do if the
+                           // receiver got cancelled
+                           let _ = tx.send(result);
+                           future::ok::<(), ()>(())
+                       })
+            })
+        );
+        rx
     }
 }
 

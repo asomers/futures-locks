@@ -2,6 +2,7 @@
 
 use futures::{Future, Stream, future, lazy, stream};
 use futures::sync::oneshot;
+use std::rc::Rc;
 use tokio;
 use tokio::runtime::{self, current_thread};
 use futures_locks::*;
@@ -361,6 +362,21 @@ fn with_read_threadpool() {
 
 #[cfg(feature = "tokio")]
 #[test]
+fn with_read_local_ok() {
+    // Note: Rc is not Send
+    let rwlock = RwLock::<Rc<i32>>::new(Rc::new(5));
+    let mut rt = current_thread::Runtime::new().unwrap();
+    let r = rt.block_on(lazy(move || {
+        let fut = rwlock.with_read_local(|guard| {
+            Ok(**guard) as Result<i32, ()>
+        });
+        fut.map(|r| assert_eq!(r, Ok(5)))
+    }));
+    assert!(r.is_ok());
+}
+
+#[cfg(feature = "tokio")]
+#[test]
 fn with_write_err() {
     let mtx = RwLock::<i32>::new(-5);
     let mut rt = current_thread::Runtime::new().unwrap();
@@ -410,6 +426,22 @@ fn with_write_threadpool() {
             Ok(()) as Result<(), ()>
         }).unwrap();
         fut.map(|_| assert_eq!(mtx.try_unwrap().unwrap(), 6))
+    }));
+    assert!(r.is_ok());
+}
+
+#[cfg(feature = "tokio")]
+#[test]
+fn with_write_local_ok() {
+    // Note: Rc is not Send
+    let rwlock = RwLock::<Rc<i32>>::new(Rc::new(5));
+    let mut rt = current_thread::Runtime::new().unwrap();
+    let r = rt.block_on(lazy(move || {
+        let fut = rwlock.with_write_local(|mut guard| {
+            *Rc::get_mut(&mut *guard).unwrap() += 1;
+            Ok(()) as Result<(), ()>
+        });
+        fut.map(|_| assert_eq!(*rwlock.try_unwrap().unwrap(), 6))
     }));
     assert!(r.is_ok());
 }

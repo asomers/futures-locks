@@ -2,6 +2,7 @@
 
 use futures::{Future, Stream, future, lazy, stream};
 use futures::sync::oneshot;
+use std::rc::Rc;
 use tokio;
 use tokio::runtime::{self, current_thread};
 use futures_locks::*;
@@ -202,6 +203,21 @@ fn with_threadpool() {
         let fut = mtx.with(|guard| {
             Ok(*guard) as Result<i32, ()>
         }).unwrap();
+        fut.map(|r| assert_eq!(r, Ok(5)))
+    }));
+    assert!(r.is_ok());
+}
+
+#[cfg(feature = "tokio")]
+#[test]
+fn with_local_ok() {
+    // Note: Rc is not Send
+    let mtx = Mutex::<Rc<i32>>::new(Rc::new(5));
+    let mut rt = current_thread::Runtime::new().unwrap();
+    let r = rt.block_on(lazy(move || {
+        let fut = mtx.with_local(|guard| {
+            Ok(**guard) as Result<i32, ()>
+        });
         fut.map(|r| assert_eq!(r, Ok(5)))
     }));
     assert!(r.is_ok());
