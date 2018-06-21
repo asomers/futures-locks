@@ -10,7 +10,8 @@ use std::collections::VecDeque;
 use std::ops::{Deref, DerefMut};
 use std::sync;
 use super::FutState;
-#[cfg(feature = "tokio")] use tokio::executor::current_thread;
+#[cfg(feature = "tokio")] use tokio;
+#[cfg(feature = "tokio")] use tokio::executor::{Executor, SpawnError};
 
 /// An RAII mutex guard, much like `std::sync::MutexGuard`.  The wrapped data
 /// can be accessed via its `Deref` and `DerefMut` implementations.
@@ -316,28 +317,32 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// # extern crate tokio;
     /// # use futures_locks::*;
     /// # use futures::{Future, IntoFuture, lazy};
-    /// # use tokio::executor::current_thread;
+    /// # use tokio::runtime::current_thread::Runtime;
     /// # fn main() {
     /// let mtx = Mutex::<u32>::new(0);
-    /// let r = current_thread::block_on_all(lazy(|| {
+    /// let mut rt = Runtime::new().unwrap();
+    /// let r = rt.block_on(lazy(|| {
     ///     mtx.with(|mut guard| {
     ///         *guard += 5;
     ///         Ok(()) as Result<(), ()>
-    ///     })
+    ///     }).unwrap()
     ///     .map(|_| assert_eq!(mtx.try_unwrap().unwrap(), 5))
     /// }));
     /// assert!(r.is_ok());
     /// # }
     /// ```
     #[cfg(feature = "tokio")]
-    pub fn with<F, B, R, E>(&self, f: F) -> oneshot::Receiver<Result<R, E>>
-        where F: FnOnce(MutexGuard<T>) -> B + 'static,
+    pub fn with<F, B, R, E>(&self, f: F)
+        -> Result<oneshot::Receiver<Result<R, E>>, SpawnError>
+        where F: FnOnce(MutexGuard<T>) -> B + Send + 'static,
               B: IntoFuture<Item = R, Error = E> + 'static,
-              R: 'static,
-              E: 'static
+              <B as IntoFuture>::Future: Send,
+              R: Send + 'static,
+              E: Send + 'static,
+              T: Send
     {
         let (tx, rx) = oneshot::channel::<Result<R, E>>();
-        current_thread::spawn(self.lock()
+        tokio::executor::DefaultExecutor::current().spawn(Box::new(self.lock()
             .and_then(move |data| {
                 f(data).into_future()
                        .then(move |result| {
@@ -347,8 +352,7 @@ impl<T: 'static + ?Sized> Mutex<T> {
                            future::ok::<(), ()>(())
                        })
             })
-        );
-        rx
+        )).map(|_| rx)
     }
 }
 

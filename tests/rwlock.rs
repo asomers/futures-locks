@@ -3,7 +3,7 @@
 use futures::{Future, Stream, future, lazy, stream};
 use futures::sync::oneshot;
 use tokio;
-use tokio::executor::current_thread;
+use tokio::runtime::{self, current_thread};
 use futures_locks::*;
 
 
@@ -12,8 +12,9 @@ use futures_locks::*;
 #[test]
 fn drop_exclusive_before_poll() {
     let rwlock = RwLock::<u32>::new(42);
+    let mut rt = current_thread::Runtime::new().unwrap();
 
-    let _ = current_thread::block_on_all(lazy(|| {
+    rt.block_on(lazy(|| {
         let mut fut1 = rwlock.read();
         let guard1 = fut1.poll();       // fut1 immediately gets ownership
         assert!(guard1.as_ref().unwrap().is_ready());
@@ -26,7 +27,7 @@ fn drop_exclusive_before_poll() {
         let guard3 = fut3.poll();       // fut3 immediately gets ownership
         assert!(guard3.as_ref().unwrap().is_ready());
         future::ok::<(), ()>(())
-    }));
+    })).unwrap();
 }
 
 // When an nonexclusively owned but not yet polled RwLock future is dropped, it
@@ -34,8 +35,9 @@ fn drop_exclusive_before_poll() {
 #[test]
 fn drop_shared_before_poll() {
     let rwlock = RwLock::<u32>::new(42);
+    let mut rt = current_thread::Runtime::new().unwrap();
 
-    let _ = current_thread::block_on_all(lazy(|| {
+    rt.block_on(lazy(|| {
         let mut fut1 = rwlock.write();
         let guard1 = fut1.poll();       // fut1 immediately gets ownership
         assert!(guard1.as_ref().unwrap().is_ready());
@@ -48,7 +50,7 @@ fn drop_shared_before_poll() {
         let guard3 = fut3.poll();       // fut3 immediately gets ownership
         assert!(guard3.as_ref().unwrap().is_ready());
         future::ok::<(), ()>(())
-    }));
+    })).unwrap();
 }
 
 // Mutably dereference a uniquely owned RwLock
@@ -71,8 +73,9 @@ fn get_mut_cloned() {
 #[test]
 fn read_shared() {
     let rwlock = RwLock::<u32>::new(42);
+    let mut rt = current_thread::Runtime::new().unwrap();
 
-    let result = current_thread::block_on_all(lazy(|| {
+    let result = rt.block_on(lazy(|| {
         let (tx0, rx0) = oneshot::channel::<()>();
         let (tx1, rx1) = oneshot::channel::<()>();
         let task0 = rwlock.read()
@@ -95,8 +98,9 @@ fn read_shared() {
 #[test]
 fn read_uncontested() {
     let rwlock = RwLock::<u32>::new(42);
+    let mut rt = current_thread::Runtime::new().unwrap();
 
-    let result = current_thread::block_on_all(lazy(|| {
+    let result = rt.block_on(lazy(|| {
         rwlock.read().map(|guard| {
             *guard
         })
@@ -109,8 +113,9 @@ fn read_uncontested() {
 #[test]
 fn read_contested() {
     let rwlock = RwLock::<u32>::new(0);
+    let mut rt = current_thread::Runtime::new().unwrap();
 
-    let result = current_thread::block_on_all(lazy(|| {
+    let result = rt.block_on(lazy(|| {
         let (tx0, rx0) = oneshot::channel::<()>();
         let (tx1, rx1) = oneshot::channel::<()>();
         let task0 = rwlock.write()
@@ -146,8 +151,9 @@ fn read_contested() {
 #[test]
 fn read_write_contested() {
     let rwlock = RwLock::<u32>::new(42);
+    let mut rt = current_thread::Runtime::new().unwrap();
 
-    let result = current_thread::block_on_all(lazy(|| {
+    let result = rt.block_on(lazy(|| {
         let (tx0, rx0) = oneshot::channel::<()>();
         let (tx1, rx1) = oneshot::channel::<()>();
         let task0 = rwlock.read()
@@ -209,8 +215,9 @@ fn try_write_contested() {
 #[test]
 fn write_uncontested() {
     let rwlock = RwLock::<u32>::new(0);
+    let mut rt = current_thread::Runtime::new().unwrap();
 
-    current_thread::block_on_all(lazy(|| {
+    rt.block_on(lazy(|| {
         rwlock.write().map(|mut guard| {
             *guard += 5;
         })
@@ -224,8 +231,9 @@ fn write_uncontested() {
 #[test]
 fn write_contested() {
     let rwlock = RwLock::<u32>::new(0);
+    let mut rt = current_thread::Runtime::new().unwrap();
 
-    let result = current_thread::block_on_all(lazy(|| {
+    let result = rt.block_on(lazy(|| {
         let (tx0, rx0) = oneshot::channel::<()>();
         let (tx1, rx1) = oneshot::channel::<()>();
         let task0 = rwlock.write()
@@ -253,8 +261,9 @@ fn write_order() {
     let rwlock = RwLock::<Vec<u32>>::new(vec![]);
     let fut2 = rwlock.write().map(|mut guard| guard.push(2));
     let fut1 = rwlock.write().map(|mut guard| guard.push(1));
+    let mut rt = current_thread::Runtime::new().unwrap();
 
-    let r = current_thread::block_on_all(lazy(|| {
+    let r = rt.block_on(lazy(|| {
         fut1.and_then(|_| fut2)
     }));
     assert!(r.is_ok());
@@ -302,14 +311,16 @@ fn multithreaded() {
 #[test]
 fn with_read_err() {
     let mtx = RwLock::<i32>::new(-5);
-    let r = current_thread::block_on_all(lazy(|| {
+    let mut rt = current_thread::Runtime::new().unwrap();
+
+    let r = rt.block_on(lazy(move || {
         let fut = mtx.with_read(|guard| {
             if *guard > 0 {
                 Ok(*guard)
             } else {
                 Err("Whoops!")
             }
-        });
+        }).unwrap();
         fut.map(|r| assert_eq!(r, Err("Whoops!")))
     }));
     assert!(r.is_ok());
@@ -319,10 +330,30 @@ fn with_read_err() {
 #[test]
 fn with_read_ok() {
     let mtx = RwLock::<i32>::new(5);
-    let r = current_thread::block_on_all(lazy(|| {
+    let mut rt = current_thread::Runtime::new().unwrap();
+
+    let r = rt.block_on(lazy(move || {
         let fut = mtx.with_read(|guard| {
             Ok(*guard) as Result<i32, ()>
-        });
+        }).unwrap();
+        fut.map(|r| assert_eq!(r, Ok(5)))
+    }));
+    assert!(r.is_ok());
+}
+
+// RwLock::with_read should work with multithreaded Runtimes as well as
+// single-threaded Runtimes.
+// https://github.com/asomers/futures-locks/issues/5
+#[cfg(feature = "tokio")]
+#[test]
+fn with_read_threadpool() {
+    let mtx = RwLock::<i32>::new(5);
+    let mut rt = runtime::Runtime::new().unwrap();
+
+    let r = rt.block_on(lazy(move || {
+        let fut = mtx.with_read(|guard| {
+            Ok(*guard) as Result<i32, ()>
+        }).unwrap();
         fut.map(|r| assert_eq!(r, Ok(5)))
     }));
     assert!(r.is_ok());
@@ -332,7 +363,9 @@ fn with_read_ok() {
 #[test]
 fn with_write_err() {
     let mtx = RwLock::<i32>::new(-5);
-    let r = current_thread::block_on_all(lazy(|| {
+    let mut rt = current_thread::Runtime::new().unwrap();
+
+    let r = rt.block_on(lazy(move || {
         let fut = mtx.with_write(|mut guard| {
             if *guard > 0 {
                 *guard -= 1;
@@ -340,7 +373,7 @@ fn with_write_err() {
             } else {
                 Err("Whoops!")
             }
-        });
+        }).unwrap();
         fut.map(|r| assert_eq!(r, Err("Whoops!")))
     }));
     assert!(r.is_ok());
@@ -350,11 +383,32 @@ fn with_write_err() {
 #[test]
 fn with_write_ok() {
     let mtx = RwLock::<i32>::new(5);
-    let r = current_thread::block_on_all(lazy(|| {
+    let mut rt = current_thread::Runtime::new().unwrap();
+
+    let r = rt.block_on(lazy(|| {
         let fut = mtx.with_write(|mut guard| {
             *guard += 1;
             Ok(()) as Result<(), ()>
-        });
+        }).unwrap();
+        fut.map(|_| assert_eq!(mtx.try_unwrap().unwrap(), 6))
+    }));
+    assert!(r.is_ok());
+}
+
+// RwLock::with_write should work with multithreaded Runtimes as well as
+// single-threaded Runtimes.
+// https://github.com/asomers/futures-locks/issues/5
+#[cfg(feature = "tokio")]
+#[test]
+fn with_write_threadpool() {
+    let mtx = RwLock::<i32>::new(5);
+    let mut rt = runtime::Runtime::new().unwrap();
+
+    let r = rt.block_on(lazy(move || {
+        let fut = mtx.with_write(|mut guard| {
+            *guard += 1;
+            Ok(()) as Result<(), ()>
+        }).unwrap();
         fut.map(|_| assert_eq!(mtx.try_unwrap().unwrap(), 6))
     }));
     assert!(r.is_ok());

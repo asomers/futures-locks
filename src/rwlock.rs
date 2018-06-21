@@ -10,7 +10,8 @@ use std::collections::VecDeque;
 use std::ops::{Deref, DerefMut};
 use std::sync;
 use super::FutState;
-#[cfg(feature = "tokio")] use tokio::executor::current_thread;
+#[cfg(feature = "tokio")] use tokio;
+#[cfg(feature = "tokio")] use tokio::executor::{Executor, SpawnError};
 
 /// An RAII guard, much like `std::sync::RwLockReadGuard`.  The wrapped data can
 /// be accessed via its `Deref` implementation.
@@ -513,13 +514,14 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// # extern crate tokio;
     /// # use futures_locks::*;
     /// # use futures::{Future, IntoFuture, lazy};
-    /// # use tokio::executor::current_thread;
+    /// # use tokio::runtime::current_thread::Runtime;
     /// # fn main() {
-    /// let mtx = RwLock::<u32>::new(5);
-    /// let r = current_thread::block_on_all(lazy(|| {
-    ///     mtx.with_read(|mut guard| {
+    /// let rwlock = RwLock::<u32>::new(5);
+    /// let mut rt = Runtime::new().unwrap();
+    /// let r = rt.block_on(lazy(|| {
+    ///     rwlock.with_read(|mut guard| {
     ///         Ok(*guard) as Result<u32, ()>
-    ///     })
+    ///     }).unwrap()
     ///     .map(|r| assert_eq!(r, Ok(5)))
     /// }));
     /// assert!(r.is_ok());
@@ -527,14 +529,16 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// ```
     #[cfg(feature = "tokio")]
     pub fn with_read<F, B, R, E>(&self, f: F)
-        -> oneshot::Receiver<Result<R, E>>
-        where F: FnOnce(RwLockReadGuard<T>) -> B + 'static,
+        -> Result<oneshot::Receiver<Result<R, E>>, SpawnError>
+        where F: FnOnce(RwLockReadGuard<T>) -> B + Send + 'static,
               B: IntoFuture<Item = R, Error = E> + 'static,
-              R: 'static,
-              E: 'static
+              <B as IntoFuture>::Future: Send,
+              R: Send + 'static,
+              E: Send + 'static,
+              T: Send
     {
         let (tx, rx) = oneshot::channel::<Result<R, E>>();
-        current_thread::spawn(self.read()
+        tokio::executor::DefaultExecutor::current().spawn(Box::new(self.read()
             .and_then(move |data| {
                 f(data).into_future()
                        .then(move |result| {
@@ -544,8 +548,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
                            future::ok::<(), ()>(())
                        })
             })
-        );
-        rx
+        )).map(|_| rx)
     }
 
     /// Acquires a `RwLock` exclusively and performs a computation on its
@@ -571,29 +574,32 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// # extern crate tokio;
     /// # use futures_locks::*;
     /// # use futures::{Future, IntoFuture, lazy};
-    /// # use tokio::executor::current_thread;
+    /// # use tokio::runtime::current_thread::Runtime;
     /// # fn main() {
-    /// let mtx = RwLock::<u32>::new(0);
-    /// let r = current_thread::block_on_all(lazy(|| {
-    ///     mtx.with_write(|mut guard| {
+    /// let rwlock = RwLock::<u32>::new(0);
+    /// let mut rt = Runtime::new().unwrap();
+    /// let r = rt.block_on(lazy(|| {
+    ///     rwlock.with_write(|mut guard| {
     ///         *guard += 5;
     ///         Ok(()) as Result<(), ()>
-    ///     })
-    ///     .map(|_| assert_eq!(mtx.try_unwrap().unwrap(), 5))
+    ///     }).unwrap()
+    ///     .map(|_| assert_eq!(rwlock.try_unwrap().unwrap(), 5))
     /// }));
     /// assert!(r.is_ok());
     /// # }
     /// ```
     #[cfg(feature = "tokio")]
     pub fn with_write<F, B, R, E>(&self, f: F)
-        -> oneshot::Receiver<Result<R, E>>
-        where F: FnOnce(RwLockWriteGuard<T>) -> B + 'static,
-              B: IntoFuture<Item = R, Error = E> + 'static,
-              R: 'static,
-              E: 'static
+        -> Result<oneshot::Receiver<Result<R, E>>, SpawnError>
+        where F: FnOnce(RwLockWriteGuard<T>) -> B + Send + 'static,
+              B: IntoFuture<Item = R, Error = E> + Send + 'static,
+              <B as IntoFuture>::Future: Send,
+              R: Send + 'static,
+              E: Send + 'static,
+              T: Send
     {
         let (tx, rx) = oneshot::channel::<Result<R, E>>();
-        current_thread::spawn(self.write()
+        tokio::executor::DefaultExecutor::current().spawn(Box::new(self.write()
             .and_then(move |data| {
                 f(data).into_future()
                        .then(move |result| {
@@ -603,8 +609,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
                            future::ok::<(), ()>(())
                        })
             })
-        );
-        rx
+        )).map(|_| rx)
     }
 }
 
