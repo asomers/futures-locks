@@ -10,6 +10,8 @@ use std::collections::VecDeque;
 use std::ops::{Deref, DerefMut};
 use std::sync;
 use super::FutState;
+#[cfg(feature = "tokio")] use tokio;
+#[cfg(feature = "tokio")] use tokio::executor::{Executor, SpawnError};
 #[cfg(feature = "tokio")] use tokio::executor::current_thread;
 
 /// An RAII mutex guard, much like `std::sync::MutexGuard`.  The wrapped data
@@ -316,21 +318,77 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// # extern crate tokio;
     /// # use futures_locks::*;
     /// # use futures::{Future, IntoFuture, lazy};
-    /// # use tokio::executor::current_thread;
+    /// # use tokio::runtime::current_thread::Runtime;
     /// # fn main() {
     /// let mtx = Mutex::<u32>::new(0);
-    /// let r = current_thread::block_on_all(lazy(|| {
+    /// let mut rt = Runtime::new().unwrap();
+    /// let r = rt.block_on(lazy(|| {
     ///     mtx.with(|mut guard| {
     ///         *guard += 5;
     ///         Ok(()) as Result<(), ()>
-    ///     })
+    ///     }).unwrap()
     ///     .map(|_| assert_eq!(mtx.try_unwrap().unwrap(), 5))
     /// }));
     /// assert!(r.is_ok());
     /// # }
     /// ```
     #[cfg(feature = "tokio")]
-    pub fn with<F, B, R, E>(&self, f: F) -> oneshot::Receiver<Result<R, E>>
+    pub fn with<F, B, R, E>(&self, f: F)
+        -> Result<oneshot::Receiver<Result<R, E>>, SpawnError>
+        where F: FnOnce(MutexGuard<T>) -> B + Send + 'static,
+              B: IntoFuture<Item = R, Error = E> + 'static,
+              <B as IntoFuture>::Future: Send,
+              R: Send + 'static,
+              E: Send + 'static,
+              T: Send
+    {
+        let (tx, rx) = oneshot::channel::<Result<R, E>>();
+        tokio::executor::DefaultExecutor::current().spawn(Box::new(self.lock()
+            .and_then(move |data| {
+                f(data).into_future()
+                       .then(move |result| {
+                           // Swallow errors; there's nothing to do if the
+                           // receiver got cancelled
+                           let _ = tx.send(result);
+                           future::ok::<(), ()>(())
+                       })
+            })
+        )).map(|_| rx)
+    }
+
+    /// Like [`with`](#method.with) but for Futures that aren't `Send`.
+    /// Spawns a new task on a single-threaded Runtime to complete the Future.
+    ///
+    /// *This method requires Futures-locks to be build with the `"tokio"`
+    /// feature.*
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate futures;
+    /// # extern crate futures_locks;
+    /// # extern crate tokio;
+    /// # use futures_locks::*;
+    /// # use futures::{Future, IntoFuture, lazy};
+    /// # use std::rc::Rc;
+    /// # use tokio::runtime::current_thread;
+    /// # fn main() {
+    /// // Note: Rc is not `Send`
+    /// let mtx = Mutex::<Rc<u32>>::new(Rc::new(0));
+    /// let mut rt = current_thread::Runtime::new().unwrap();
+    /// let r = rt.block_on(lazy(|| {
+    ///     mtx.with_local(|mut guard| {
+    ///         *Rc::get_mut(&mut *guard).unwrap() += 5;
+    ///         Ok(()) as Result<(), ()>
+    ///     })
+    ///     .map(|_| assert_eq!(*mtx.try_unwrap().unwrap(), 5))
+    /// }));
+    /// assert!(r.is_ok());
+    /// # }
+    /// ```
+    #[cfg(feature = "tokio")]
+    pub fn with_local<F, B, R, E>(&self, f: F)
+        -> oneshot::Receiver<Result<R, E>>
         where F: FnOnce(MutexGuard<T>) -> B + 'static,
               B: IntoFuture<Item = R, Error = E> + 'static,
               R: 'static,

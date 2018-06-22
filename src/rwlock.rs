@@ -10,6 +10,8 @@ use std::collections::VecDeque;
 use std::ops::{Deref, DerefMut};
 use std::sync;
 use super::FutState;
+#[cfg(feature = "tokio")] use tokio;
+#[cfg(feature = "tokio")] use tokio::executor::{Executor, SpawnError};
 #[cfg(feature = "tokio")] use tokio::executor::current_thread;
 
 /// An RAII guard, much like `std::sync::RwLockReadGuard`.  The wrapped data can
@@ -513,13 +515,14 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// # extern crate tokio;
     /// # use futures_locks::*;
     /// # use futures::{Future, IntoFuture, lazy};
-    /// # use tokio::executor::current_thread;
+    /// # use tokio::runtime::current_thread::Runtime;
     /// # fn main() {
-    /// let mtx = RwLock::<u32>::new(5);
-    /// let r = current_thread::block_on_all(lazy(|| {
-    ///     mtx.with_read(|mut guard| {
+    /// let rwlock = RwLock::<u32>::new(5);
+    /// let mut rt = Runtime::new().unwrap();
+    /// let r = rt.block_on(lazy(|| {
+    ///     rwlock.with_read(|mut guard| {
     ///         Ok(*guard) as Result<u32, ()>
-    ///     })
+    ///     }).unwrap()
     ///     .map(|r| assert_eq!(r, Ok(5)))
     /// }));
     /// assert!(r.is_ok());
@@ -527,6 +530,60 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// ```
     #[cfg(feature = "tokio")]
     pub fn with_read<F, B, R, E>(&self, f: F)
+        -> Result<oneshot::Receiver<Result<R, E>>, SpawnError>
+        where F: FnOnce(RwLockReadGuard<T>) -> B + Send + 'static,
+              B: IntoFuture<Item = R, Error = E> + 'static,
+              <B as IntoFuture>::Future: Send,
+              R: Send + 'static,
+              E: Send + 'static,
+              T: Send
+    {
+        let (tx, rx) = oneshot::channel::<Result<R, E>>();
+        tokio::executor::DefaultExecutor::current().spawn(Box::new(self.read()
+            .and_then(move |data| {
+                f(data).into_future()
+                       .then(move |result| {
+                           // Swallow errors; there's nothing to do if the
+                           // receiver got cancelled
+                           let _ = tx.send(result);
+                           future::ok::<(), ()>(())
+                       })
+            })
+        )).map(|_| rx)
+    }
+
+    /// Like [`with_read`](#method.with_read) but for Futures that aren't
+    /// `Send`.  Spawns a new task on a single-threaded Runtime to complete the
+    /// Future.
+    ///
+    /// *This method requires Futures-locks to be build with the `"tokio"`
+    /// feature.*
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate futures;
+    /// # extern crate futures_locks;
+    /// # extern crate tokio;
+    /// # use futures_locks::*;
+    /// # use futures::{Future, IntoFuture, lazy};
+    /// # use std::rc::Rc;
+    /// # use tokio::runtime::current_thread;
+    /// # fn main() {
+    /// // Note: Rc is not `Send`
+    /// let rwlock = RwLock::<Rc<u32>>::new(Rc::new(5));
+    /// let mut rt = current_thread::Runtime::new().unwrap();
+    /// let r = rt.block_on(lazy(|| {
+    ///     rwlock.with_read_local(|mut guard| {
+    ///         Ok(**guard) as Result<u32, ()>
+    ///     })
+    ///     .map(|r| assert_eq!(r, Ok(5)))
+    /// }));
+    /// assert!(r.is_ok());
+    /// # }
+    /// ```
+    #[cfg(feature = "tokio")]
+    pub fn with_read_local<F, B, R, E>(&self, f: F)
         -> oneshot::Receiver<Result<R, E>>
         where F: FnOnce(RwLockReadGuard<T>) -> B + 'static,
               B: IntoFuture<Item = R, Error = E> + 'static,
@@ -571,21 +628,77 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// # extern crate tokio;
     /// # use futures_locks::*;
     /// # use futures::{Future, IntoFuture, lazy};
-    /// # use tokio::executor::current_thread;
+    /// # use tokio::runtime::current_thread::Runtime;
     /// # fn main() {
-    /// let mtx = RwLock::<u32>::new(0);
-    /// let r = current_thread::block_on_all(lazy(|| {
-    ///     mtx.with_write(|mut guard| {
+    /// let rwlock = RwLock::<u32>::new(0);
+    /// let mut rt = Runtime::new().unwrap();
+    /// let r = rt.block_on(lazy(|| {
+    ///     rwlock.with_write(|mut guard| {
     ///         *guard += 5;
     ///         Ok(()) as Result<(), ()>
-    ///     })
-    ///     .map(|_| assert_eq!(mtx.try_unwrap().unwrap(), 5))
+    ///     }).unwrap()
+    ///     .map(|_| assert_eq!(rwlock.try_unwrap().unwrap(), 5))
     /// }));
     /// assert!(r.is_ok());
     /// # }
     /// ```
     #[cfg(feature = "tokio")]
     pub fn with_write<F, B, R, E>(&self, f: F)
+        -> Result<oneshot::Receiver<Result<R, E>>, SpawnError>
+        where F: FnOnce(RwLockWriteGuard<T>) -> B + Send + 'static,
+              B: IntoFuture<Item = R, Error = E> + Send + 'static,
+              <B as IntoFuture>::Future: Send,
+              R: Send + 'static,
+              E: Send + 'static,
+              T: Send
+    {
+        let (tx, rx) = oneshot::channel::<Result<R, E>>();
+        tokio::executor::DefaultExecutor::current().spawn(Box::new(self.write()
+            .and_then(move |data| {
+                f(data).into_future()
+                       .then(move |result| {
+                           // Swallow errors; there's nothing to do if the
+                           // receiver got cancelled
+                           let _ = tx.send(result);
+                           future::ok::<(), ()>(())
+                       })
+            })
+        )).map(|_| rx)
+    }
+
+    /// Like [`with_write`](#method.with_write) but for Futures that aren't
+    /// `Send`.  Spawns a new task on a single-threaded Runtime to complete the
+    /// Future.
+    ///
+    /// *This method requires Futures-locks to be build with the `"tokio"`
+    /// feature.*
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # extern crate futures;
+    /// # extern crate futures_locks;
+    /// # extern crate tokio;
+    /// # use futures_locks::*;
+    /// # use futures::{Future, IntoFuture, lazy};
+    /// # use std::rc::Rc;
+    /// # use tokio::runtime::current_thread;
+    /// # fn main() {
+    /// // Note: Rc is not `Send`
+    /// let rwlock = RwLock::<Rc<u32>>::new(Rc::new(0));
+    /// let mut rt = current_thread::Runtime::new().unwrap();
+    /// let r = rt.block_on(lazy(|| {
+    ///     rwlock.with_write_local(|mut guard| {
+    ///         *Rc::get_mut(&mut *guard).unwrap() += 5;
+    ///         Ok(()) as Result<(), ()>
+    ///     })
+    ///     .map(|_| assert_eq!(*rwlock.try_unwrap().unwrap(), 5))
+    /// }));
+    /// assert!(r.is_ok());
+    /// # }
+    /// ```
+    #[cfg(feature = "tokio")]
+    pub fn with_write_local<F, B, R, E>(&self, f: F)
         -> oneshot::Receiver<Result<R, E>>
         where F: FnOnce(RwLockWriteGuard<T>) -> B + 'static,
               B: IntoFuture<Item = R, Error = E> + 'static,
