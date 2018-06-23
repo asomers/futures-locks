@@ -382,7 +382,7 @@ impl<T: 'static + ?Sized> Mutex<T> {
     ///     mtx.with_local(|mut guard| {
     ///         *Rc::get_mut(&mut *guard).unwrap() += 5;
     ///         Ok(()) as Result<(), ()>
-    ///     })
+    ///     }).unwrap()
     /// }));
     /// assert!(r.is_ok());
     /// assert_eq!(*mtx.try_unwrap().unwrap(), 5);
@@ -390,14 +390,15 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// ```
     #[cfg(feature = "tokio")]
     pub fn with_local<F, B, R, E>(&self, f: F)
-        -> impl Future<Item = R, Error = E>
+        -> Result<impl Future<Item = R, Error = E>, SpawnError>
         where F: FnOnce(MutexGuard<T>) -> B + 'static,
               B: IntoFuture<Item = R, Error = E> + 'static,
               R: 'static,
               E: 'static
     {
         let (tx, rx) = oneshot::channel::<Result<R, E>>();
-        current_thread::spawn(self.lock()
+        current_thread::TaskExecutor::current().spawn_local(Box::new(
+            self.lock()
             .and_then(move |data| {
                 f(data).into_future()
                        .then(move |result| {
@@ -407,10 +408,9 @@ impl<T: 'static + ?Sized> Mutex<T> {
                            future::ok::<(), ()>(())
                        })
             })
-        );
-        // We control the sender so we're sure it won't be dropped before
-        // sending so we can unwrap safely
-        rx.then(Result::unwrap)
+            // We control the sender so we're sure it won't be dropped before
+            // sending so we can unwrap safely
+        )).map(|_| rx.then(Result::unwrap))
     }
 }
 

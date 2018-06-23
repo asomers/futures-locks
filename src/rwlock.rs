@@ -577,21 +577,22 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// let r = rt.block_on(lazy(|| {
     ///     rwlock.with_read_local(|mut guard| {
     ///         Ok(**guard) as Result<u32, ()>
-    ///     })
+    ///     }).unwrap()
     /// }));
     /// assert_eq!(r, Ok(5));
     /// # }
     /// ```
     #[cfg(feature = "tokio")]
     pub fn with_read_local<F, B, R, E>(&self, f: F)
-        -> impl Future<Item = R, Error = E>
+        -> Result<impl Future<Item = R, Error = E>, SpawnError>
         where F: FnOnce(RwLockReadGuard<T>) -> B + 'static,
               B: IntoFuture<Item = R, Error = E> + 'static,
               R: 'static,
               E: 'static
     {
         let (tx, rx) = oneshot::channel::<Result<R, E>>();
-        current_thread::spawn(self.read()
+        current_thread::TaskExecutor::current().spawn_local(Box::new(
+            self.read()
             .and_then(move |data| {
                 f(data).into_future()
                        .then(move |result| {
@@ -601,10 +602,9 @@ impl<T: 'static + ?Sized> RwLock<T> {
                            future::ok::<(), ()>(())
                        })
             })
-        );
-        // We control the sender so we're sure it won't be dropped before
-        // sending so we can unwrap safely
-        rx.then(Result::unwrap)
+            // We control the sender so we're sure it won't be dropped before
+            // sending so we can unwrap safely
+        )).map(|_| rx.then(Result::unwrap))
     }
 
     /// Acquires a `RwLock` exclusively and performs a computation on its
@@ -695,7 +695,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     ///     rwlock.with_write_local(|mut guard| {
     ///         *Rc::get_mut(&mut *guard).unwrap() += 5;
     ///         Ok(()) as Result<(), ()>
-    ///     })
+    ///     }).unwrap()
     /// }));
     /// assert!(r.is_ok());
     /// assert_eq!(*rwlock.try_unwrap().unwrap(), 5);
@@ -703,14 +703,15 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// ```
     #[cfg(feature = "tokio")]
     pub fn with_write_local<F, B, R, E>(&self, f: F)
-        -> impl Future<Item = R, Error = E>
+        -> Result<impl Future<Item = R, Error = E>, SpawnError>
         where F: FnOnce(RwLockWriteGuard<T>) -> B + 'static,
               B: IntoFuture<Item = R, Error = E> + 'static,
               R: 'static,
               E: 'static
     {
         let (tx, rx) = oneshot::channel::<Result<R, E>>();
-        current_thread::spawn(self.write()
+        current_thread::TaskExecutor::current().spawn_local(Box::new(
+            self.write()
             .and_then(move |data| {
                 f(data).into_future()
                        .then(move |result| {
@@ -720,10 +721,9 @@ impl<T: 'static + ?Sized> RwLock<T> {
                            future::ok::<(), ()>(())
                        })
             })
-        );
-        // We control the sender so we're sure it won't be dropped before
-        // sending so we can unwrap safely
-        rx.then(Result::unwrap)
+            // We control the sender so we're sure it won't be dropped before
+            // sending so we can unwrap safely
+        )).map(|_| rx.then(Result::unwrap))
     }
 }
 

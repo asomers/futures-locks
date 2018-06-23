@@ -214,7 +214,7 @@ fn with_local_ok() {
     let r = rt.block_on(lazy(move || {
         mtx.with_local(|guard| {
             Ok(**guard) as Result<i32, ()>
-        })
+        }).unwrap()
     }));
     assert_eq!(r, Ok(5));
 }
