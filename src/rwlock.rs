@@ -523,14 +523,13 @@ impl<T: 'static + ?Sized> RwLock<T> {
     ///     rwlock.with_read(|mut guard| {
     ///         Ok(*guard) as Result<u32, ()>
     ///     }).unwrap()
-    ///     .map(|r| assert_eq!(r, Ok(5)))
     /// }));
-    /// assert!(r.is_ok());
+    /// assert_eq!(r, Ok(5));
     /// # }
     /// ```
     #[cfg(feature = "tokio")]
     pub fn with_read<F, B, R, E>(&self, f: F)
-        -> Result<oneshot::Receiver<Result<R, E>>, SpawnError>
+        -> Result<impl Future<Item = R, Error = E>, SpawnError>
         where F: FnOnce(RwLockReadGuard<T>) -> B + Send + 'static,
               B: IntoFuture<Item = R, Error = E> + 'static,
               <B as IntoFuture>::Future: Send,
@@ -549,7 +548,9 @@ impl<T: 'static + ?Sized> RwLock<T> {
                            future::ok::<(), ()>(())
                        })
             })
-        )).map(|_| rx)
+            // We control the sender so we're sure it won't be dropped before
+            // sending so we can unwrap safely
+        )).map(|_| rx.then(Result::unwrap))
     }
 
     /// Like [`with_read`](#method.with_read) but for Futures that aren't
@@ -577,14 +578,13 @@ impl<T: 'static + ?Sized> RwLock<T> {
     ///     rwlock.with_read_local(|mut guard| {
     ///         Ok(**guard) as Result<u32, ()>
     ///     })
-    ///     .map(|r| assert_eq!(r, Ok(5)))
     /// }));
-    /// assert!(r.is_ok());
+    /// assert_eq!(r, Ok(5));
     /// # }
     /// ```
     #[cfg(feature = "tokio")]
     pub fn with_read_local<F, B, R, E>(&self, f: F)
-        -> oneshot::Receiver<Result<R, E>>
+        -> impl Future<Item = R, Error = E>
         where F: FnOnce(RwLockReadGuard<T>) -> B + 'static,
               B: IntoFuture<Item = R, Error = E> + 'static,
               R: 'static,
@@ -602,7 +602,9 @@ impl<T: 'static + ?Sized> RwLock<T> {
                        })
             })
         );
-        rx
+        // We control the sender so we're sure it won't be dropped before
+        // sending so we can unwrap safely
+        rx.then(Result::unwrap)
     }
 
     /// Acquires a `RwLock` exclusively and performs a computation on its
@@ -637,14 +639,14 @@ impl<T: 'static + ?Sized> RwLock<T> {
     ///         *guard += 5;
     ///         Ok(()) as Result<(), ()>
     ///     }).unwrap()
-    ///     .map(|_| assert_eq!(rwlock.try_unwrap().unwrap(), 5))
     /// }));
     /// assert!(r.is_ok());
+    /// assert_eq!(rwlock.try_unwrap().unwrap(), 5);
     /// # }
     /// ```
     #[cfg(feature = "tokio")]
     pub fn with_write<F, B, R, E>(&self, f: F)
-        -> Result<oneshot::Receiver<Result<R, E>>, SpawnError>
+        -> Result<impl Future<Item = R, Error = E>, SpawnError>
         where F: FnOnce(RwLockWriteGuard<T>) -> B + Send + 'static,
               B: IntoFuture<Item = R, Error = E> + Send + 'static,
               <B as IntoFuture>::Future: Send,
@@ -663,7 +665,9 @@ impl<T: 'static + ?Sized> RwLock<T> {
                            future::ok::<(), ()>(())
                        })
             })
-        )).map(|_| rx)
+            // We control the sender so we're sure it won't be dropped before
+            // sending so we can unwrap safely
+        )).map(|_| rx.then(Result::unwrap))
     }
 
     /// Like [`with_write`](#method.with_write) but for Futures that aren't
@@ -692,14 +696,14 @@ impl<T: 'static + ?Sized> RwLock<T> {
     ///         *Rc::get_mut(&mut *guard).unwrap() += 5;
     ///         Ok(()) as Result<(), ()>
     ///     })
-    ///     .map(|_| assert_eq!(*rwlock.try_unwrap().unwrap(), 5))
     /// }));
     /// assert!(r.is_ok());
+    /// assert_eq!(*rwlock.try_unwrap().unwrap(), 5);
     /// # }
     /// ```
     #[cfg(feature = "tokio")]
     pub fn with_write_local<F, B, R, E>(&self, f: F)
-        -> oneshot::Receiver<Result<R, E>>
+        -> impl Future<Item = R, Error = E>
         where F: FnOnce(RwLockWriteGuard<T>) -> B + 'static,
               B: IntoFuture<Item = R, Error = E> + 'static,
               R: 'static,
@@ -717,7 +721,9 @@ impl<T: 'static + ?Sized> RwLock<T> {
                        })
             })
         );
-        rx
+        // We control the sender so we're sure it won't be dropped before
+        // sending so we can unwrap safely
+        rx.then(Result::unwrap)
     }
 }
 

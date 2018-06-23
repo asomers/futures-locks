@@ -8,6 +8,9 @@
 - `Mutex::with`, `RwLock::with_read`, and `RwLock::with_write` now require
   their Futures to be `Send`.  They also can return errors.
   ([#7](https://github.com/asomers/futures-locks/pull/7))
+- Methods enabled with the tokio feature now return a Future type equivalent
+  to the one returned by the provided closure.
+  ([#6](https://github.com/asomers/futures-locks/pull/6))
 
 ### Fixed
 - `Mutex::with`, `RwLock::with_read`, and `RwLock::with_write` now work with
