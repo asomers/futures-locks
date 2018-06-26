@@ -366,7 +366,7 @@ fn with_read_local_ok() {
     let r = rt.block_on(lazy(move || {
         rwlock.with_read_local(|guard| {
             Ok(**guard) as Result<i32, ()>
-        })
+        }).unwrap()
     }));
     assert_eq!(r, Ok(5));
 }
@@ -436,7 +436,7 @@ fn with_write_local_ok() {
         rwlock.with_write_local(|mut guard| {
             *Rc::get_mut(&mut *guard).unwrap() += 1;
             Ok(()) as Result<(), ()>
-        })
+        }).unwrap()
     }));
     assert!(r.is_ok());
     assert_eq!(*rwlock.try_unwrap().unwrap(), 6);
