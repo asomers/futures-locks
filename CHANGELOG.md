@@ -1,4 +1,4 @@
-## [Unreleased] - ReleaseDate
+## [0.3.0] - 2018-06-28
 ### Added
 - Added `Mutex::with_local`, `RwLock::with_read_local`, and
   `RwLock::with_write_local` for non-`Send` Futures.
