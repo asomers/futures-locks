@@ -10,9 +10,8 @@ use std::collections::VecDeque;
 use std::ops::{Deref, DerefMut};
 use std::sync;
 use super::FutState;
-#[cfg(feature = "tokio")] use tokio;
-#[cfg(feature = "tokio")] use tokio::executor::{Executor, SpawnError};
-#[cfg(feature = "tokio")] use tokio::executor::current_thread;
+#[cfg(feature = "tokio")] use tokio_executor::{self, Executor, SpawnError};
+#[cfg(feature = "tokio")] use tokio_current_thread as current_thread;
 
 /// An RAII mutex guard, much like `std::sync::MutexGuard`.  The wrapped data
 /// can be accessed via its `Deref` and `DerefMut` implementations.
@@ -315,7 +314,7 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// ```
     /// # extern crate futures;
     /// # extern crate futures_locks;
-    /// # extern crate tokio;
+    /// # extern crate tokio_ as tokio;
     /// # use futures_locks::*;
     /// # use futures::{Future, IntoFuture, lazy};
     /// # use tokio::runtime::current_thread::Runtime;
@@ -343,7 +342,7 @@ impl<T: 'static + ?Sized> Mutex<T> {
               T: Send
     {
         let (tx, rx) = oneshot::channel::<Result<R, E>>();
-        tokio::executor::DefaultExecutor::current().spawn(Box::new(self.lock()
+        tokio_executor::DefaultExecutor::current().spawn(Box::new(self.lock()
             .and_then(move |data| {
                 f(data).into_future()
                        .then(move |result| {
@@ -369,7 +368,7 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// ```
     /// # extern crate futures;
     /// # extern crate futures_locks;
-    /// # extern crate tokio;
+    /// # extern crate tokio_ as tokio;
     /// # use futures_locks::*;
     /// # use futures::{Future, IntoFuture, lazy};
     /// # use std::rc::Rc;

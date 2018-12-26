@@ -10,9 +10,8 @@ use std::collections::VecDeque;
 use std::ops::{Deref, DerefMut};
 use std::sync;
 use super::FutState;
-#[cfg(feature = "tokio")] use tokio;
-#[cfg(feature = "tokio")] use tokio::executor::{Executor, SpawnError};
-#[cfg(feature = "tokio")] use tokio::executor::current_thread;
+#[cfg(feature = "tokio")] use tokio_executor::{self, Executor, SpawnError};
+#[cfg(feature = "tokio")] use tokio_current_thread as current_thread;
 
 /// An RAII guard, much like `std::sync::RwLockReadGuard`.  The wrapped data can
 /// be accessed via its `Deref` implementation.
@@ -512,7 +511,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// ```
     /// # extern crate futures;
     /// # extern crate futures_locks;
-    /// # extern crate tokio;
+    /// # extern crate tokio_ as tokio;
     /// # use futures_locks::*;
     /// # use futures::{Future, IntoFuture, lazy};
     /// # use tokio::runtime::current_thread::Runtime;
@@ -538,7 +537,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
               T: Send
     {
         let (tx, rx) = oneshot::channel::<Result<R, E>>();
-        tokio::executor::DefaultExecutor::current().spawn(Box::new(self.read()
+        tokio_executor::DefaultExecutor::current().spawn(Box::new(self.read()
             .and_then(move |data| {
                 f(data).into_future()
                        .then(move |result| {
@@ -565,7 +564,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// ```
     /// # extern crate futures;
     /// # extern crate futures_locks;
-    /// # extern crate tokio;
+    /// # extern crate tokio_ as tokio;
     /// # use futures_locks::*;
     /// # use futures::{Future, IntoFuture, lazy};
     /// # use std::rc::Rc;
@@ -627,7 +626,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// ```
     /// # extern crate futures;
     /// # extern crate futures_locks;
-    /// # extern crate tokio;
+    /// # extern crate tokio_ as tokio;
     /// # use futures_locks::*;
     /// # use futures::{Future, IntoFuture, lazy};
     /// # use tokio::runtime::current_thread::Runtime;
@@ -655,7 +654,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
               T: Send
     {
         let (tx, rx) = oneshot::channel::<Result<R, E>>();
-        tokio::executor::DefaultExecutor::current().spawn(Box::new(self.write()
+        tokio_executor::DefaultExecutor::current().spawn(Box::new(self.write()
             .and_then(move |data| {
                 f(data).into_future()
                        .then(move |result| {
@@ -682,7 +681,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// ```
     /// # extern crate futures;
     /// # extern crate futures_locks;
-    /// # extern crate tokio;
+    /// # extern crate tokio_ as tokio;
     /// # use futures_locks::*;
     /// # use futures::{Future, IntoFuture, lazy};
     /// # use std::rc::Rc;
