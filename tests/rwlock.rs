@@ -2,9 +2,12 @@
 
 use futures::{Future, Stream, future, lazy, stream};
 use futures::sync::oneshot;
+#[cfg(feature = "tokio")]
 use std::rc::Rc;
 use tokio;
-use tokio::runtime::{self, current_thread};
+#[cfg(feature = "tokio")]
+use tokio::runtime;
+use tokio::runtime::current_thread;
 use futures_locks::*;
 
 

@@ -10,7 +10,9 @@ test_task:
   cargo_cache:
     folder: $CARGO_HOME/registry
   build_script: cargo build
-  test_script: cargo test
+  test_script:
+    - cargo test
+    - cargo test --no-default-features
   before_cache_script: rm -rf $CARGO_HOME/registry/index
 
 codecov_task:
