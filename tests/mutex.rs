@@ -159,7 +159,7 @@ fn try_unwrap_multiply_referenced() {
     assert!(mtx.try_unwrap().is_err());
 }
 
-#[cfg(feature = "tokio-locks")]
+#[cfg(feature = "tokio")]
 #[test]
 fn with_err() {
     let mtx = Mutex::<i32>::new(-5);
@@ -176,7 +176,7 @@ fn with_err() {
     assert_eq!(r, Err("Whoops!"));
 }
 
-#[cfg(feature = "tokio-locks")]
+#[cfg(feature = "tokio")]
 #[test]
 fn with_ok() {
     let mtx = Mutex::<i32>::new(5);
@@ -192,7 +192,7 @@ fn with_ok() {
 // Mutex::with should work with multithreaded Runtimes as well as
 // single-threaded Runtimes.
 // https://github.com/asomers/futures-locks/issues/5
-#[cfg(feature = "tokio-locks")]
+#[cfg(feature = "tokio")]
 #[test]
 fn with_threadpool() {
     let mtx = Mutex::<i32>::new(5);
@@ -205,7 +205,7 @@ fn with_threadpool() {
     assert_eq!(r, Ok(5));
 }
 
-#[cfg(feature = "tokio-locks")]
+#[cfg(feature = "tokio")]
 #[test]
 fn with_local_ok() {
     // Note: Rc is not Send

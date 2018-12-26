@@ -1,8 +1,8 @@
 // vim: tw=80
 
 use futures::{Async, Future, Poll};
-#[cfg(feature = "tokio-locks")] use futures::future;
-#[cfg(feature = "tokio-locks")] use futures::future::IntoFuture;
+#[cfg(feature = "tokio")] use futures::future;
+#[cfg(feature = "tokio")] use futures::future::IntoFuture;
 use futures::sync::oneshot;
 use std::cell::UnsafeCell;
 use std::clone::Clone;
@@ -10,8 +10,8 @@ use std::collections::VecDeque;
 use std::ops::{Deref, DerefMut};
 use std::sync;
 use super::FutState;
-#[cfg(feature = "tokio-locks")] use tokio_executor::{self, Executor, SpawnError};
-#[cfg(feature = "tokio-locks")] use tokio_current_thread as current_thread;
+#[cfg(feature = "tokio")] use tokio_executor::{self, Executor, SpawnError};
+#[cfg(feature = "tokio")] use tokio_current_thread as current_thread;
 
 /// An RAII guard, much like `std::sync::RwLockReadGuard`.  The wrapped data can
 /// be accessed via its `Deref` implementation.
@@ -495,7 +495,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// guarded value in a separate task.  Returns a `Future` containing the
     /// result of the computation.
     ///
-    /// *This method requires Futures-locks to be build with the `"tokio-locks"`
+    /// *This method requires Futures-locks to be build with the `"tokio"`
     /// feature.*
     ///
     /// When using Tokio, this method will often hold the `RwLock` for less time
@@ -511,7 +511,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// ```
     /// # extern crate futures;
     /// # extern crate futures_locks;
-    /// # extern crate tokio;
+    /// # extern crate tokio_ as tokio;
     /// # use futures_locks::*;
     /// # use futures::{Future, IntoFuture, lazy};
     /// # use tokio::runtime::current_thread::Runtime;
@@ -526,7 +526,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// assert_eq!(r, Ok(5));
     /// # }
     /// ```
-    #[cfg(feature = "tokio-locks")]
+    #[cfg(feature = "tokio")]
     pub fn with_read<F, B, R, E>(&self, f: F)
         -> Result<impl Future<Item = R, Error = E>, SpawnError>
         where F: FnOnce(RwLockReadGuard<T>) -> B + Send + 'static,
@@ -556,7 +556,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// `Send`.  Spawns a new task on a single-threaded Runtime to complete the
     /// Future.
     ///
-    /// *This method requires Futures-locks to be build with the `"tokio-locks"`
+    /// *This method requires Futures-locks to be build with the `"tokio"`
     /// feature.*
     ///
     /// # Examples
@@ -564,7 +564,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// ```
     /// # extern crate futures;
     /// # extern crate futures_locks;
-    /// # extern crate tokio;
+    /// # extern crate tokio_ as tokio;
     /// # use futures_locks::*;
     /// # use futures::{Future, IntoFuture, lazy};
     /// # use std::rc::Rc;
@@ -581,7 +581,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// assert_eq!(r, Ok(5));
     /// # }
     /// ```
-    #[cfg(feature = "tokio-locks")]
+    #[cfg(feature = "tokio")]
     pub fn with_read_local<F, B, R, E>(&self, f: F)
         -> Result<impl Future<Item = R, Error = E>, SpawnError>
         where F: FnOnce(RwLockReadGuard<T>) -> B + 'static,
@@ -610,7 +610,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// guarded value in a separate task.  Returns a `Future` containing the
     /// result of the computation.
     ///
-    /// *This method requires Futures-locks to be build with the `"tokio-locks"`
+    /// *This method requires Futures-locks to be build with the `"tokio"`
     /// feature.*
     ///
     /// When using Tokio, this method will often hold the `RwLock` for less time
@@ -626,7 +626,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// ```
     /// # extern crate futures;
     /// # extern crate futures_locks;
-    /// # extern crate tokio;
+    /// # extern crate tokio_ as tokio;
     /// # use futures_locks::*;
     /// # use futures::{Future, IntoFuture, lazy};
     /// # use tokio::runtime::current_thread::Runtime;
@@ -643,7 +643,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// assert_eq!(rwlock.try_unwrap().unwrap(), 5);
     /// # }
     /// ```
-    #[cfg(feature = "tokio-locks")]
+    #[cfg(feature = "tokio")]
     pub fn with_write<F, B, R, E>(&self, f: F)
         -> Result<impl Future<Item = R, Error = E>, SpawnError>
         where F: FnOnce(RwLockWriteGuard<T>) -> B + Send + 'static,
@@ -673,7 +673,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// `Send`.  Spawns a new task on a single-threaded Runtime to complete the
     /// Future.
     ///
-    /// *This method requires Futures-locks to be build with the `"tokio-locks"`
+    /// *This method requires Futures-locks to be build with the `"tokio"`
     /// feature.*
     ///
     /// # Examples
@@ -681,7 +681,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// ```
     /// # extern crate futures;
     /// # extern crate futures_locks;
-    /// # extern crate tokio;
+    /// # extern crate tokio_ as tokio;
     /// # use futures_locks::*;
     /// # use futures::{Future, IntoFuture, lazy};
     /// # use std::rc::Rc;
@@ -700,7 +700,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// assert_eq!(*rwlock.try_unwrap().unwrap(), 5);
     /// # }
     /// ```
-    #[cfg(feature = "tokio-locks")]
+    #[cfg(feature = "tokio")]
     pub fn with_write_local<F, B, R, E>(&self, f: F)
         -> Result<impl Future<Item = R, Error = E>, SpawnError>
         where F: FnOnce(RwLockWriteGuard<T>) -> B + 'static,

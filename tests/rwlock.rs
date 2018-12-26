@@ -308,7 +308,7 @@ fn multithreaded() {
     assert_eq!(rwlock.try_unwrap().expect("try_unwrap"), 17_000);
 }
 
-#[cfg(feature = "tokio-locks")]
+#[cfg(feature = "tokio")]
 #[test]
 fn with_read_err() {
     let mtx = RwLock::<i32>::new(-5);
@@ -326,7 +326,7 @@ fn with_read_err() {
     assert_eq!(r, Err("Whoops!"));
 }
 
-#[cfg(feature = "tokio-locks")]
+#[cfg(feature = "tokio")]
 #[test]
 fn with_read_ok() {
     let mtx = RwLock::<i32>::new(5);
@@ -343,7 +343,7 @@ fn with_read_ok() {
 // RwLock::with_read should work with multithreaded Runtimes as well as
 // single-threaded Runtimes.
 // https://github.com/asomers/futures-locks/issues/5
-#[cfg(feature = "tokio-locks")]
+#[cfg(feature = "tokio")]
 #[test]
 fn with_read_threadpool() {
     let mtx = RwLock::<i32>::new(5);
@@ -357,7 +357,7 @@ fn with_read_threadpool() {
     assert_eq!(r, Ok(5));
 }
 
-#[cfg(feature = "tokio-locks")]
+#[cfg(feature = "tokio")]
 #[test]
 fn with_read_local_ok() {
     // Note: Rc is not Send
@@ -371,7 +371,7 @@ fn with_read_local_ok() {
     assert_eq!(r, Ok(5));
 }
 
-#[cfg(feature = "tokio-locks")]
+#[cfg(feature = "tokio")]
 #[test]
 fn with_write_err() {
     let mtx = RwLock::<i32>::new(-5);
@@ -390,7 +390,7 @@ fn with_write_err() {
     assert_eq!(r, Err("Whoops!"));
 }
 
-#[cfg(feature = "tokio-locks")]
+#[cfg(feature = "tokio")]
 #[test]
 fn with_write_ok() {
     let mtx = RwLock::<i32>::new(5);
@@ -409,7 +409,7 @@ fn with_write_ok() {
 // RwLock::with_write should work with multithreaded Runtimes as well as
 // single-threaded Runtimes.
 // https://github.com/asomers/futures-locks/issues/5
-#[cfg(feature = "tokio-locks")]
+#[cfg(feature = "tokio")]
 #[test]
 fn with_write_threadpool() {
     let mtx = RwLock::<i32>::new(5);
@@ -426,7 +426,7 @@ fn with_write_threadpool() {
     assert_eq!(test_mtx.try_unwrap().unwrap(), 6);
 }
 
-#[cfg(feature = "tokio-locks")]
+#[cfg(feature = "tokio")]
 #[test]
 fn with_write_local_ok() {
     // Note: Rc is not Send
