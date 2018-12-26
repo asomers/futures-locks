@@ -1,8 +1,8 @@
 // vim: tw=80
 
 use futures::{Async, Future, Poll};
-#[cfg(feature = "tokio")] use futures::future;
-#[cfg(feature = "tokio")] use futures::future::IntoFuture;
+#[cfg(feature = "tokio-locks")] use futures::future;
+#[cfg(feature = "tokio-locks")] use futures::future::IntoFuture;
 use futures::sync::oneshot;
 use std::cell::UnsafeCell;
 use std::clone::Clone;
@@ -10,9 +10,8 @@ use std::collections::VecDeque;
 use std::ops::{Deref, DerefMut};
 use std::sync;
 use super::FutState;
-#[cfg(feature = "tokio")] use tokio;
-#[cfg(feature = "tokio")] use tokio::executor::{Executor, SpawnError};
-#[cfg(feature = "tokio")] use tokio::executor::current_thread;
+#[cfg(feature = "tokio-locks")] use tokio_executor::{Executor, SpawnError};
+#[cfg(feature = "tokio-locks")] use tokio_current_thread as current_thread;
 
 /// An RAII mutex guard, much like `std::sync::MutexGuard`.  The wrapped data
 /// can be accessed via its `Deref` and `DerefMut` implementations.
@@ -299,7 +298,7 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// separate task.  Returns a `Future` containing the result of the
     /// computation.
     ///
-    /// *This method requires Futures-locks to be build with the `"tokio"`
+    /// *This method requires Futures-locks to be build with the `"tokio-locks"`
     /// feature.*
     ///
     /// When using Tokio, this method will often hold the `Mutex` for less time
@@ -332,7 +331,7 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// assert_eq!(mtx.try_unwrap().unwrap(), 5);
     /// # }
     /// ```
-    #[cfg(feature = "tokio")]
+    #[cfg(feature = "tokio-locks")]
     pub fn with<F, B, R, E>(&self, f: F)
         -> Result<impl Future<Item = R, Error = E>, SpawnError>
         where F: FnOnce(MutexGuard<T>) -> B + Send + 'static,
@@ -343,7 +342,7 @@ impl<T: 'static + ?Sized> Mutex<T> {
               T: Send
     {
         let (tx, rx) = oneshot::channel::<Result<R, E>>();
-        tokio::executor::DefaultExecutor::current().spawn(Box::new(self.lock()
+        tokio_executor::DefaultExecutor::current().spawn(Box::new(self.lock()
             .and_then(move |data| {
                 f(data).into_future()
                        .then(move |result| {
@@ -361,7 +360,7 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// Like [`with`](#method.with) but for Futures that aren't `Send`.
     /// Spawns a new task on a single-threaded Runtime to complete the Future.
     ///
-    /// *This method requires Futures-locks to be build with the `"tokio"`
+    /// *This method requires Futures-locks to be build with the `"tokio-locks"`
     /// feature.*
     ///
     /// # Examples
@@ -388,7 +387,7 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// assert_eq!(*mtx.try_unwrap().unwrap(), 5);
     /// # }
     /// ```
-    #[cfg(feature = "tokio")]
+    #[cfg(feature = "tokio-locks")]
     pub fn with_local<F, B, R, E>(&self, f: F)
         -> Result<impl Future<Item = R, Error = E>, SpawnError>
         where F: FnOnce(MutexGuard<T>) -> B + 'static,

@@ -18,11 +18,13 @@ exclude = [
 autotests = false
 
 [features]
-default = ["tokio"]
+default = ["tokio-locks"]
+tokio-locks = ["tokio-current-thread", "tokio-executor"]
 
 [dependencies]
 futures = "0.1.20"
-tokio = { version = "0.1.7", optional = true }
+tokio-current-thread = { version = "0.1.4", optional = true }
+tokio-executor = { version = "0.1.5", optional = true }
 
 [dev-dependencies]
 tokio = "0.1.4"
