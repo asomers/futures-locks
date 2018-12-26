@@ -1,4 +1,4 @@
-## Unreleased - ReleaseDate
+## 0.3.1 - 2018-12-26
 ### Changed
 - Minimum compiler version has increased to 1.31.0
   ([#10](https://github.com/asomers/futures-locks/pull/10))
