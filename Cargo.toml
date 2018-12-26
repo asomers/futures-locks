@@ -30,7 +30,7 @@ tokio-executor = { version = "0.1.5", optional = true }
 # features, dependencies, dev-dependencies, and build-dependencies all share
 # the same namespace. To avoid a clash with the `tokio` feature, rename the
 # `tokio` dev-dependency. See https://github.com/rust-lang/cargo/issues/4866.
-tokio_ = { version = "0.1.4", package = "tokio" }
+tokio_ = { version = "0.1.8", package = "tokio" }
 
 [[test]]
 name = "functional"
