@@ -1,3 +1,11 @@
+## Unreleased - ReleaseDate
+### Changed
+- Minimum compiler version has increased to 1.31.0
+  ([#10](https://github.com/asomers/futures-locks/pull/10))
+- `futures-locks` only depends on tokio crates `tokio-current-thread` and
+  `tokio-executor` when built with the `tokio` feature.
+  ([#10](https://github.com/asomers/futures-locks/pull/10))
+
 ## [0.3.0] - 2018-06-28
 ### Added
 - Added `Mutex::with_local`, `RwLock::with_read_local`, and
