@@ -5,12 +5,7 @@ sudo: required
 rust:
   - 1.31.0
   - stable
-  - beta
   - nightly
-
-matrix:
-  allow_failures:
-    - rust: nightly
 
 env:
   global:
