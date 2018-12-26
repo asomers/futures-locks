@@ -10,7 +10,7 @@ use std::collections::VecDeque;
 use std::ops::{Deref, DerefMut};
 use std::sync;
 use super::FutState;
-#[cfg(feature = "tokio-locks")] use tokio_executor::{Executor, SpawnError};
+#[cfg(feature = "tokio-locks")] use tokio_executor::{self, Executor, SpawnError};
 #[cfg(feature = "tokio-locks")] use tokio_current_thread as current_thread;
 
 /// An RAII mutex guard, much like `std::sync::MutexGuard`.  The wrapped data
