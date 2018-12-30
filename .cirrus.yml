@@ -9,9 +9,18 @@ test_task:
        image: rustlang/rust:nightly
   cargo_cache:
     folder: $CARGO_HOME/registry
-  build_script: cargo build
+  build_script:
+    - if rustc --version | grep -q nightly; then
+    -   cargo build --all-targets
+    - else
+    -   cargo build
+    - fi
   test_script:
-    - cargo test
+    - if rustc --version | grep -q nightly; then
+    -   cargo test --all-targets
+    - else
+    -   cargo test
+    - fi
     - cargo test --no-default-features
   before_cache_script: rm -rf $CARGO_HOME/registry/index
 
