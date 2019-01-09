@@ -79,17 +79,14 @@ impl<T: ?Sized> Drop for RwLockReadFut<T> {
             },
             &mut FutState::Pending(ref mut rx) => {
                 rx.close();
-                // TODO: futures-0.2.0 introduces a try_recv method that is
-                // better to use here than poll.  Use it after upgrading to
-                // futures >= 0.2.0
-                match rx.poll() {
-                    Ok(Async::Ready(())) => {
+                match rx.try_recv() {
+                    Ok(Some(())) => {
                         // This future received ownership of the lock, but got
                         // dropped before it was ever polled.  Release the
                         // lock.
                         self.rwlock.unlock_reader()
                     },
-                    Ok(Async::NotReady) => {
+                    Ok(None) => {
                         // Dropping the Future before it acquires the lock is
                         // equivalent to cancelling it.
                     },
@@ -170,17 +167,14 @@ impl<T: ?Sized> Drop for RwLockWriteFut<T> {
             },
             &mut FutState::Pending(ref mut rx) => {
                 rx.close();
-                // TODO: futures-0.2.0 introduces a try_recv method that is
-                // better to use here than poll.  Use it after upgrading to
-                // futures >= 0.2.0
-                match rx.poll() {
-                    Ok(Async::Ready(())) => {
+                match rx.try_recv() {
+                    Ok(Some(())) => {
                         // This future received ownership of the lock, but got
                         // dropped before it was ever polled.  Release the
                         // lock.
                         self.rwlock.unlock_writer()
                     },
-                    Ok(Async::NotReady) => {
+                    Ok(None) => {
                         // Dropping the Future before it acquires the lock is
                         // equivalent to cancelling it.
                     },

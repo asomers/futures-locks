@@ -59,17 +59,14 @@ impl<T: ?Sized> Drop for MutexFut<T> {
             },
             &mut FutState::Pending(ref mut rx) => {
                 rx.close();
-                // TODO: futures-0.2.0 introduces a try_recv method that is
-                // better to use here than poll.  Use it after upgrading to
-                // futures >= 0.2.0
-                match rx.poll() {
-                    Ok(Async::Ready(())) => {
+                match rx.try_recv() {
+                    Ok(Some(())) => {
                         // This future received ownership of the mutex, but got
                         // dropped before it was ever polled.  Release the
                         // mutex.
                         self.mutex.unlock()
                     },
-                    Ok(Async::NotReady) => {
+                    Ok(None) => {
                         // Dropping the Future before it acquires the Mutex is
                         // equivalent to cancelling it.
                     },
