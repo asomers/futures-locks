@@ -7,6 +7,8 @@
 //! [`Futures`]: https://github.com/rust-lang-nursery/futures-rs
 //! [`Tokio`]: https:/tokio.rs
 
+#![cfg_attr(feature = "nightly-docs", feature(doc_cfg))]
+
 extern crate futures;
 #[cfg(feature = "tokio")] extern crate tokio_current_thread;
 #[cfg(feature = "tokio")] extern crate tokio_executor;

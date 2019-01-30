@@ -295,9 +295,6 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// separate task.  Returns a `Future` containing the result of the
     /// computation.
     ///
-    /// *This method requires Futures-locks to be build with the `"tokio"`
-    /// feature.*
-    ///
     /// When using Tokio, this method will often hold the `Mutex` for less time
     /// than chaining a computation to [`lock`](#method.lock).  The reason is
     /// that Tokio polls all tasks promptly upon notification.  However, Tokio
@@ -328,7 +325,8 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// assert_eq!(mtx.try_unwrap().unwrap(), 5);
     /// # }
     /// ```
-    #[cfg(feature = "tokio")]
+    #[cfg(any(feature = "tokio", all(feature = "nightly-docs", rustdoc)))]
+    #[cfg_attr(feature = "nightly-docs", doc(cfg(feature = "tokio")))]
     pub fn with<F, B, R, E>(&self, f: F)
         -> Result<impl Future<Item = R, Error = E>, SpawnError>
         where F: FnOnce(MutexGuard<T>) -> B + Send + 'static,
@@ -357,9 +355,6 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// Like [`with`](#method.with) but for Futures that aren't `Send`.
     /// Spawns a new task on a single-threaded Runtime to complete the Future.
     ///
-    /// *This method requires Futures-locks to be build with the `"tokio"`
-    /// feature.*
-    ///
     /// # Examples
     ///
     /// ```
@@ -384,7 +379,8 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// assert_eq!(*mtx.try_unwrap().unwrap(), 5);
     /// # }
     /// ```
-    #[cfg(feature = "tokio")]
+    #[cfg(any(feature = "tokio", all(feature = "nightly-docs", rustdoc)))]
+    #[cfg_attr(feature = "nightly-docs", doc(cfg(feature = "tokio")))]
     pub fn with_local<F, B, R, E>(&self, f: F)
         -> Result<impl Future<Item = R, Error = E>, SpawnError>
         where F: FnOnce(MutexGuard<T>) -> B + 'static,
