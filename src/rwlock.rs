@@ -489,9 +489,6 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// guarded value in a separate task.  Returns a `Future` containing the
     /// result of the computation.
     ///
-    /// *This method requires Futures-locks to be build with the `"tokio"`
-    /// feature.*
-    ///
     /// When using Tokio, this method will often hold the `RwLock` for less time
     /// than chaining a computation to [`read`](#method.read).  The reason is
     /// that Tokio polls all tasks promptly upon notification.  However, Tokio
@@ -520,7 +517,8 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// assert_eq!(r, Ok(5));
     /// # }
     /// ```
-    #[cfg(feature = "tokio")]
+    #[cfg(any(feature = "tokio", all(feature = "nightly-docs", rustdoc)))]
+    #[cfg_attr(feature = "nightly-docs", doc(cfg(feature = "tokio")))]
     pub fn with_read<F, B, R, E>(&self, f: F)
         -> Result<impl Future<Item = R, Error = E>, SpawnError>
         where F: FnOnce(RwLockReadGuard<T>) -> B + Send + 'static,
@@ -550,9 +548,6 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// `Send`.  Spawns a new task on a single-threaded Runtime to complete the
     /// Future.
     ///
-    /// *This method requires Futures-locks to be build with the `"tokio"`
-    /// feature.*
-    ///
     /// # Examples
     ///
     /// ```
@@ -575,7 +570,8 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// assert_eq!(r, Ok(5));
     /// # }
     /// ```
-    #[cfg(feature = "tokio")]
+    #[cfg(any(feature = "tokio", all(feature = "nightly-docs", rustdoc)))]
+    #[cfg_attr(feature = "nightly-docs", doc(cfg(feature = "tokio")))]
     pub fn with_read_local<F, B, R, E>(&self, f: F)
         -> Result<impl Future<Item = R, Error = E>, SpawnError>
         where F: FnOnce(RwLockReadGuard<T>) -> B + 'static,
@@ -603,9 +599,6 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// Acquires a `RwLock` exclusively and performs a computation on its
     /// guarded value in a separate task.  Returns a `Future` containing the
     /// result of the computation.
-    ///
-    /// *This method requires Futures-locks to be build with the `"tokio"`
-    /// feature.*
     ///
     /// When using Tokio, this method will often hold the `RwLock` for less time
     /// than chaining a computation to [`write`](#method.write).  The reason is
@@ -637,7 +630,8 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// assert_eq!(rwlock.try_unwrap().unwrap(), 5);
     /// # }
     /// ```
-    #[cfg(feature = "tokio")]
+    #[cfg(any(feature = "tokio", all(feature = "nightly-docs", rustdoc)))]
+    #[cfg_attr(feature = "nightly-docs", doc(cfg(feature = "tokio")))]
     pub fn with_write<F, B, R, E>(&self, f: F)
         -> Result<impl Future<Item = R, Error = E>, SpawnError>
         where F: FnOnce(RwLockWriteGuard<T>) -> B + Send + 'static,
@@ -667,9 +661,6 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// `Send`.  Spawns a new task on a single-threaded Runtime to complete the
     /// Future.
     ///
-    /// *This method requires Futures-locks to be build with the `"tokio"`
-    /// feature.*
-    ///
     /// # Examples
     ///
     /// ```
@@ -694,7 +685,8 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// assert_eq!(*rwlock.try_unwrap().unwrap(), 5);
     /// # }
     /// ```
-    #[cfg(feature = "tokio")]
+    #[cfg(any(feature = "tokio", all(feature = "nightly-docs", rustdoc)))]
+    #[cfg_attr(feature = "nightly-docs", doc(cfg(feature = "tokio")))]
     pub fn with_write_local<F, B, R, E>(&self, f: F)
         -> Result<impl Future<Item = R, Error = E>, SpawnError>
         where F: FnOnce(RwLockWriteGuard<T>) -> B + 'static,

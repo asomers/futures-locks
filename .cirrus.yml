@@ -22,6 +22,10 @@ test_task:
     -   cargo test
     - fi
     - cargo test --no-default-features
+  doc_script:
+    - if rustc --version | grep -q nightly; then
+    -   cargo doc --all-features --no-deps
+    - fi
   before_cache_script: rm -rf $CARGO_HOME/registry/index
 
 codecov_task:

@@ -19,6 +19,9 @@ autotests = false
 
 [features]
 default = ["tokio"]
+# For building documentation only; no functional change to the library.
+nightly-docs = []
+# Enable methods that require a Tokio executor.
 tokio = ["tokio-current-thread", "tokio-executor"]
 
 [dependencies]
