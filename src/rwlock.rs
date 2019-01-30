@@ -235,7 +235,6 @@ impl<T: ?Sized> Future for RwLockWriteFut<T> {
     }
 }
 
-// LCOV_EXCL_START
 #[derive(Debug)]
 struct RwLockData {
     /// True iff the `RwLock` is currently exclusively owned
@@ -250,15 +249,12 @@ struct RwLockData {
     // FIFO queue of waiting writers
     write_waiters: VecDeque<oneshot::Sender<()>>,
 }
-// LCOV_EXCL_STOP
 
-// LCOV_EXCL_START
 #[derive(Debug)]
 struct Inner<T: ?Sized> {
     mutex: sync::Mutex<RwLockData>,
     data: UnsafeCell<T>,
 }
-// LCOV_EXCL_STOP
 
 /// A Futures-aware RwLock.
 ///
@@ -268,12 +264,10 @@ struct Inner<T: ?Sized> {
 /// class, it also has a builtin `Arc`, making it accessible from multiple
 /// threads.  It's also safe to `clone`.  Also unlike `std::sync::RwLock`, this
 /// class does not detect lock poisoning.
-// LCOV_EXCL_START
 #[derive(Debug)]
 pub struct RwLock<T: ?Sized> {
     inner: sync::Arc<Inner<T>>,
 }
-// LCOV_EXCL_STOP
 
 impl<T: ?Sized> Clone for RwLock<T> {
     fn clone(&self) -> RwLock<T> {
@@ -722,3 +716,17 @@ impl<T: 'static + ?Sized> RwLock<T> {
 
 unsafe impl<T: ?Sized + Send> Send for RwLock<T> {}
 unsafe impl<T: ?Sized + Send> Sync for RwLock<T> {}
+
+// LCOV_EXCL_START
+#[cfg(test)]
+mod t {
+    use super::*;
+
+    /// Pet Kcov
+    #[test]
+    fn debug() {
+        let m = RwLock::<u32>::new(0);
+        format!("{:?}", &m);
+    }
+}
+// LCOV_EXCL_STOP
