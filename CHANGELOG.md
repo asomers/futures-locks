@@ -1,4 +1,4 @@
-## [Unreleased] - ReleaseDate
+## [0.3.2] - 2019-01-30
 ### Changed
 - Better documentation
   ([#15](https://github.com/asomers/futures-locks/pull/15))
