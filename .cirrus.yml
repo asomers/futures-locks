@@ -47,7 +47,7 @@ codecov_task:
     - cargo install cargo-kcov
     - if [ ! -x $HOME/.cargo/bin/kcov ] || [ ! -f $HOME/.cargo/bin/kcov ]; then mkdir kcov && cd kcov && cargo kcov --print-install-kcov-sh | sh && cd - && rm -rf kcov; fi
   codecov_script:
-    - cargo build       # Ensure Cargo.lock exists
+    - cargo check       # Ensure Cargo.lock exists
     - cargo kcov --verbose -- --include-pattern='futures-locks/src'
     - bash <(curl -s https://codecov.io/bash)
   before_cache_script: rm -rf $CARGO_HOME/registry/index
