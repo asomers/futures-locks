@@ -1,3 +1,8 @@
+## [Unreleased] - ReleaseDate
+### Added
+- Added `MutexWeak` by using the `sync::Weak`
+  ([#17](https://github.com/asomers/futures-locks/pull/17)) 
+
 ## [0.3.2] - 2019-01-30
 ### Changed
 - Better documentation
