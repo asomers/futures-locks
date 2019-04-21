@@ -10,6 +10,25 @@ use tokio::runtime;
 use tokio::runtime::current_thread;
 use futures_locks::*;
 
+// Create a MutexWeak and then upgrade it to Mutex
+#[test]
+fn mutex_weak_some() {
+    let mutex = Mutex::<u32>::new(0);
+    let mutex_weak = Mutex::downgrade(&mutex);
+
+    assert!(mutex_weak.upgrade().is_some())
+}
+
+// Create a MutexWeak and drop the mutex so that MutexWeak::upgrade return None
+#[test]
+fn mutext_weak_none() {
+    let mutex = Mutex::<u32>::new(0);
+    let mutex_weak = Mutex::downgrade(&mutex);
+
+    drop(mutex);
+
+    assert!(mutex_weak.upgrade().is_none())
+}
 
 // When a pending Mutex gets dropped, it should drain its channel and relinquish
 // ownership if a message was found.  If not, deadlocks may result.
