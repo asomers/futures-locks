@@ -141,11 +141,11 @@ struct Inner<T: ?Sized> {
 }
 
 #[derive(Debug)]
-pub struct WeakMutex<T: ?Sized> {
+pub struct MutexWeak<T: ?Sized> {
     inner: sync::Weak<Inner<T>>,
 }
 
-impl<T: ?Sized> WeakMutex<T> {
+impl<T: ?Sized> MutexWeak<T> {
     pub fn upgrade(&self) -> Option<Mutex<T>> {
         if let Some(inner) = self.inner.upgrade() {
             return Some(Mutex{inner})
@@ -154,9 +154,9 @@ impl<T: ?Sized> WeakMutex<T> {
     }
 }
 
-impl<T: ?Sized> Clone for WeakMutex<T> {
-    fn clone(&self) -> WeakMutex<T> {
-        WeakMutex{inner: self.inner.clone()}
+impl<T: ?Sized> Clone for MutexWeak<T> {
+    fn clone(&self) -> MutexWeak<T> {
+        MutexWeak {inner: self.inner.clone()}
     }
 }
 
@@ -226,8 +226,8 @@ impl<T> Mutex<T> {
 }
 
 impl<T: ?Sized> Mutex<T> {
-    pub fn downgrade(this: &Mutex<T>) -> WeakMutex<T> {
-        WeakMutex {inner: sync::Arc::<Inner<T>>::downgrade(&this.inner)}
+    pub fn downgrade(this: &Mutex<T>) -> MutexWeak<T> {
+        MutexWeak {inner: sync::Arc::<Inner<T>>::downgrade(&this.inner)}
     }
 
     /// Returns a reference to the underlying data, if there are no other

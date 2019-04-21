@@ -36,7 +36,7 @@ extern crate futures;
 mod mutex;
 mod rwlock;
 
-pub use mutex::{Mutex, MutexFut, MutexGuard, WeakMutex};
+pub use mutex::{Mutex, MutexFut, MutexGuard, MutexWeak};
 pub use rwlock::{RwLock, RwLockReadFut, RwLockWriteFut,
                  RwLockReadGuard, RwLockWriteGuard};
 
