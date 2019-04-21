@@ -163,9 +163,7 @@ pub struct MutexWeak<T: ?Sized> {
 
 impl<T: ?Sized> MutexWeak<T> {
     /// Tries to upgrade the `MutexWeak` to `Mutex`. If the `Mutex` was dropped 
-    /// then the function return [`None`].
-    ///
-    /// [`None`]: https://doc.rust-lang.org/std/option/enum.Option.html
+    /// then the function return `None`.
     pub fn upgrade(&self) -> Option<Mutex<T>> {
         if let Some(inner) = self.inner.upgrade() {
             return Some(Mutex{inner})
