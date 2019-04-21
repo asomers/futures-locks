@@ -140,9 +140,10 @@ struct Inner<T: ?Sized> {
     data: UnsafeCell<T>,
 }
 
-/// `MutexWeak` is non-owning reference to a mutex like [`Weak`] for [`Arc`].
+/// `MutexWeak` is a non-owning reference to a [`Mutex`].  `MutexWeak` is to 
+/// [`Mutex`] as [`std::sync::Weak`] is to [`std::sync::Arc`].
 /// 
-/// # Example
+/// # Examples
 /// ```
 /// # use futures_locks::{Mutex,MutexGuard};
 /// # fn main() {
@@ -152,14 +153,19 @@ struct Inner<T: ?Sized> {
 /// # }
 /// ```
 ///
-/// [`Weak`]: https://doc.rust-lang.org/std/sync/struct.Weak.html
-/// [`Arc`]: https://doc.rust-lang.org/std/sync/struct.Arc.html
+/// [`Mutex`]: struct.Mutex.html
+/// [`std::sync::Weak`]: https://doc.rust-lang.org/std/sync/struct.Weak.html
+/// [`std::sync::Arc`]: https://doc.rust-lang.org/std/sync/struct.Arc.html
 #[derive(Debug)]
 pub struct MutexWeak<T: ?Sized> {
     inner: sync::Weak<Inner<T>>,
 }
 
 impl<T: ?Sized> MutexWeak<T> {
+    /// Tries to upgrade the `MutexWeak` to `Mutex`. If the `Mutex` was dropped 
+    /// then the function return [`None`].
+    ///
+    /// [`None`]: https://doc.rust-lang.org/std/option/enum.Option.html
     pub fn upgrade(&self) -> Option<Mutex<T>> {
         if let Some(inner) = self.inner.upgrade() {
             return Some(Mutex{inner})
@@ -240,6 +246,9 @@ impl<T> Mutex<T> {
 }
 
 impl<T: ?Sized> Mutex<T> {
+    /// Create a [`MutexWeak`] reference to this `Mutex`.
+    ///
+    /// [`MutexWeak`]: struct.MutexWeak.html
     pub fn downgrade(this: &Mutex<T>) -> MutexWeak<T> {
         MutexWeak {inner: sync::Arc::<Inner<T>>::downgrade(&this.inner)}
     }
