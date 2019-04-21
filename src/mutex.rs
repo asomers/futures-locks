@@ -154,6 +154,12 @@ impl<T: ?Sized> WeakMutex<T> {
     }
 }
 
+impl<T: ?Sized> Clone for WeakMutex<T> {
+    fn clone(&self) -> WeakMutex<T> {
+        WeakMutex{inner: self.inner.clone()}
+    }
+}
+
 /// A Futures-aware Mutex.
 ///
 /// `std::sync::Mutex` cannot be used in an asynchronous environment like Tokio,
