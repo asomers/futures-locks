@@ -140,6 +140,20 @@ struct Inner<T: ?Sized> {
     data: UnsafeCell<T>,
 }
 
+#[derive(Debug)]
+pub struct WeakMutex<T: ?Sized> {
+    inner: sync::Weak<Inner<T>>,
+}
+
+impl<T: ?Sized> WeakMutex<T> {
+    pub fn upgrade(&self) -> Option<Mutex<T>> {
+        if let Some(inner) = self.inner.upgrade() {
+            return Some(Mutex{inner})
+        }
+        None
+    }
+}
+
 /// A Futures-aware Mutex.
 ///
 /// `std::sync::Mutex` cannot be used in an asynchronous environment like Tokio,
@@ -206,6 +220,10 @@ impl<T> Mutex<T> {
 }
 
 impl<T: ?Sized> Mutex<T> {
+    pub fn downgrade(this: &Mutex<T>) -> WeakMutex<T> {
+        WeakMutex {inner: sync::Arc::<Inner<T>>::downgrade(&this.inner)}
+    }
+
     /// Returns a reference to the underlying data, if there are no other
     /// clones of the `Mutex`.
     ///
