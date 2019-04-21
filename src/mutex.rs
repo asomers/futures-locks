@@ -140,6 +140,20 @@ struct Inner<T: ?Sized> {
     data: UnsafeCell<T>,
 }
 
+/// `MutexWeak` is non-owning reference to a mutex like [`Weak`] for [`Arc`].
+/// 
+/// # Example
+/// ```
+/// # use futures_locks::{Mutex,MutexGuard};
+/// # fn main() {
+/// let mutex = Mutex::<u32>::new(0);
+/// let mutex_weak = Mutex::downgrade(&mutex);
+/// let mutex_new = mutex_weak.upgrade().unwrap();
+/// # }
+/// ```
+///
+/// [`Weak`]: https://doc.rust-lang.org/std/sync/struct.Weak.html
+/// [`Arc`]: https://doc.rust-lang.org/std/sync/struct.Arc.html
 #[derive(Debug)]
 pub struct MutexWeak<T: ?Sized> {
     inner: sync::Weak<Inner<T>>,
