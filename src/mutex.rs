@@ -178,6 +178,9 @@ impl<T: ?Sized> Clone for MutexWeak<T> {
     }
 }
 
+unsafe impl<T: ?Sized + Send> Send for MutexWeak<T> {}
+unsafe impl<T: ?Sized + Send> Sync for MutexWeak<T> {}
+
 /// A Futures-aware Mutex.
 ///
 /// `std::sync::Mutex` cannot be used in an asynchronous environment like Tokio,
