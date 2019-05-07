@@ -330,6 +330,11 @@ impl<T: ?Sized> Mutex<T> {
             mtx_data.owned = false;
         }
     }
+
+    /// Returns true if the two `Mutex` point to the same data else false.
+    pub fn ptr_eq(this: &Mutex<T>, other: &Mutex<T>) -> bool {
+        sync::Arc::ptr_eq(&this.inner, &other.inner)
+    }
 }
 
 impl<T: 'static + ?Sized> Mutex<T> {
