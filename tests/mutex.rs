@@ -30,6 +30,24 @@ fn mutext_weak_none() {
     assert!(mutex_weak.upgrade().is_none())
 }
 
+// Compare Mutexes if it point to the same value
+#[test]
+fn mutex_eq_ptr_true() {
+    let mutex = Mutex::<u32>::new(0);
+    let mutex_other = mutex.clone();
+
+    assert!(Mutex::ptr_eq(&mutex, &mutex_other));
+}
+
+// Compare Mutexes if it point to the same value
+#[test]
+fn mutex_eq_ptr_false() {
+    let mutex = Mutex::<u32>::new(0);
+    let mutex_other = Mutex::<u32>::new(0);
+
+    assert!(!Mutex::ptr_eq(&mutex, &mutex_other));
+}
+
 // When a pending Mutex gets dropped, it should drain its channel and relinquish
 // ownership if a message was found.  If not, deadlocks may result.
 #[test]
