@@ -2,6 +2,7 @@
 ### Added
 - Removed dependency on specific patch-version of futures.
   ([#19](https://github.com/asomers/futures-locks/pull/19))
+- Added `Mutex::ptr_eq()`
 - Added `MutexWeak`
   ([#17](https://github.com/asomers/futures-locks/pull/17)) 
 
