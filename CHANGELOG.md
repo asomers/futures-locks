@@ -3,7 +3,7 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
-## [Unreleased] - ReleaseDate
+## [0.4.0] - 2019-08-24
 ### Added
 - Added `Mutex::ptr_eq()`
   ([#20](https://github.com/asomers/futures-locks/pull/20))
