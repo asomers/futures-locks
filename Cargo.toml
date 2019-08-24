@@ -28,7 +28,7 @@ nightly-docs = []
 tokio = ["tokio-current-thread", "tokio-executor"]
 
 [dependencies]
-futures = "0.1"
+futures = "0.1.25"
 tokio-current-thread = { version = "0.1.4", optional = true }
 tokio-executor = { version = "0.1.5", optional = true }
 
