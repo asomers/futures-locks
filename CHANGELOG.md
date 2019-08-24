@@ -1,7 +1,10 @@
+# Change Log
+
+All notable changes to this project will be documented in this file.
+This project adheres to [Semantic Versioning](http://semver.org/).
+
 ## [Unreleased] - ReleaseDate
 ### Added
-- Removed dependency on specific patch-version of futures.
-  ([#19](https://github.com/asomers/futures-locks/pull/19))
 - Added `Mutex::ptr_eq()`
   ([#20](https://github.com/asomers/futures-locks/pull/20))
 - Added `MutexWeak`
