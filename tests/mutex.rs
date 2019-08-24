@@ -21,13 +21,31 @@ fn mutex_weak_some() {
 
 // Create a MutexWeak and drop the mutex so that MutexWeak::upgrade return None
 #[test]
-fn mutext_weak_none() {
+fn mutex_weak_none() {
     let mutex = Mutex::<u32>::new(0);
     let mutex_weak = Mutex::downgrade(&mutex);
 
     drop(mutex);
 
     assert!(mutex_weak.upgrade().is_none())
+}
+
+// Compare Mutexes if it point to the same value
+#[test]
+fn mutex_eq_ptr_true() {
+    let mutex = Mutex::<u32>::new(0);
+    let mutex_other = mutex.clone();
+
+    assert!(Mutex::ptr_eq(&mutex, &mutex_other));
+}
+
+// Compare Mutexes if it point to the same value
+#[test]
+fn mutex_eq_ptr_false() {
+    let mutex = Mutex::<u32>::new(0);
+    let mutex_other = Mutex::<u32>::new(0);
+
+    assert!(!Mutex::ptr_eq(&mutex, &mutex_other));
 }
 
 // When a pending Mutex gets dropped, it should drain its channel and relinquish
