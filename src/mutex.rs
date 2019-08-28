@@ -127,14 +127,14 @@ impl<T: ?Sized> Future for MutexFut<T> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct MutexData {
     owned: bool,
     // FIFO queue of waiting tasks.
     waiters: VecDeque<oneshot::Sender<()>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Inner<T: ?Sized> {
     mutex: sync::Mutex<MutexData>,
     data: UnsafeCell<T>,
@@ -205,7 +205,7 @@ unsafe impl<T: ?Sized + Send> Sync for MutexWeak<T> {}
 /// assert_eq!(mtx.try_unwrap().unwrap(), 5);
 /// # }
 /// ```
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Mutex<T: ?Sized> {
     inner: sync::Arc<Inner<T>>,
 }
@@ -466,6 +466,15 @@ mod t {
     fn debug() {
         let m = Mutex::<u32>::new(0);
         format!("{:?}", &m);
+    }
+
+    #[test]
+    fn test_default() {
+        let m = Mutex::default();
+        let value: u32 = m.try_unwrap().unwrap();
+        let expected = u32::default();
+
+        assert_eq!(expected, value);
     }
 }
 // LCOV_EXCL_STOP
