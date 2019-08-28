@@ -235,7 +235,7 @@ impl<T: ?Sized> Future for RwLockWriteFut<T> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct RwLockData {
     /// True iff the `RwLock` is currently exclusively owned
     exclusive: bool,
@@ -250,7 +250,7 @@ struct RwLockData {
     write_waiters: VecDeque<oneshot::Sender<()>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Inner<T: ?Sized> {
     mutex: sync::Mutex<RwLockData>,
     data: UnsafeCell<T>,
@@ -264,7 +264,7 @@ struct Inner<T: ?Sized> {
 /// class, it also has a builtin `Arc`, making it accessible from multiple
 /// threads.  It's also safe to `clone`.  Also unlike `std::sync::RwLock`, this
 /// class does not detect lock poisoning.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct RwLock<T: ?Sized> {
     inner: sync::Arc<Inner<T>>,
 }
@@ -719,6 +719,15 @@ mod t {
     fn debug() {
         let m = RwLock::<u32>::new(0);
         format!("{:?}", &m);
+    }
+
+    #[test]
+    fn test_default() {
+        let lock = RwLock::default();
+        let value: u32 = lock.try_unwrap().unwrap();
+        let expected = u32::default();
+
+        assert_eq!(expected, value);
     }
 }
 // LCOV_EXCL_STOP
