@@ -1,12 +1,13 @@
 #![feature(test)]
 
-extern crate futures;
-extern crate futures_locks;
 extern crate test;
 extern crate tokio_ as tokio;
 
-use futures::Future;
-use futures::executor::spawn;
+use futures::{
+    FutureExt,
+    executor::block_on,
+    future::join
+};
 use futures_locks::*;
 use test::Bencher;
 
@@ -16,7 +17,7 @@ fn bench_mutex_uncontested(bench: &mut Bencher) {
     let mutex = Mutex::<()>::new(());
 
     bench.iter(|| {
-        spawn(mutex.lock().map(|_guard| ())).wait_future().unwrap();
+        block_on(mutex.lock().map(|_guard| ()));
     });
 }
 
@@ -28,7 +29,6 @@ fn bench_mutex_contested(bench: &mut Bencher) {
     bench.iter(|| {
         let fut0 = mutex.lock().map(|_guard| ());
         let fut1 = mutex.lock().map(|_guard| ());
-        spawn(fut0.join(fut1)).wait_future().unwrap();
-        //spawn(mutex.lock().map(|_guard| ())).wait_future();
+        block_on(join(fut0, fut1));
     });
 }

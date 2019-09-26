@@ -3,6 +3,22 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [Unreleased] - ReleaseNotes
+### Added
+### Changed
+- Updated to `std::future`.  `futures-locks` no longer works with
+  `futures-0.1`.  For `futures-0.1`-based applications, continue to use the 0.5
+  branch.  Most methods have similar interfaces.  However, the `IntoFuture`
+  trait no longer exists in the `std::future` world.  And `Future<T>` doesn't
+  implement `From<T>` (though I don't know why it couldn't).  So `Mutex::with`,
+  `RwLock::with_read`, and `RwLock::with_write` now take closures that return
+  `impl Future`, instead of `impl IntoFuture`.  Closure arguments that used to
+  return something like `Result<T, E>` should now return
+  `futures::future::ready<Result<T, E>>` instead.
+
+### Fixed
+### Removed
+
 ## [0.5.0] - 2019-11-03
 ### Added
 - Derived `Default` for `Mutex` and `RwLock`

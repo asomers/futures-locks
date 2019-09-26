@@ -13,8 +13,8 @@ a single task, not the entire reactor.
 ```toml
 # Cargo.toml
 [dependencies]
-futures = "0.1.25"
-futures-locks = "0.5"
+futures-preview = "=0.3.0-alpha.18"
+futures-locks = "0.6"
 ```
 
 # Usage
@@ -24,7 +24,7 @@ standard library.  But instead of blocking until ready, they return Futures
 which will become ready when the lock is acquired.  See the doc comments for
 individual examples.
 
-`futures-locks` requires Rust 1.32.0 or higher.
+`futures-locks` requires Rust 1.39.0 or higher.
 
 # License
 
