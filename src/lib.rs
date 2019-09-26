@@ -12,12 +12,12 @@
 //!
 //! ```
 //! # use futures_locks::*;
-//! # use futures::executor::{Spawn, spawn};
-//! # use futures::Future;
+//! # use futures::executor::block_on;
+//! # use futures::{Future, FutureExt};
 //! # fn main() {
 //! let mtx = Mutex::<u32>::new(0);
 //! let fut = mtx.lock().map(|mut guard| { *guard += 5; });
-//! spawn(fut).wait_future();
+//! block_on(fut);
 //! assert_eq!(mtx.try_unwrap().unwrap(), 5);
 //! # }
 //! ```
@@ -34,11 +34,12 @@ pub use mutex::{Mutex, MutexFut, MutexGuard, MutexWeak};
 pub use rwlock::{RwLock, RwLockReadFut, RwLockWriteFut,
                  RwLockReadGuard, RwLockWriteGuard};
 
-use futures::sync::oneshot;
+use futures::channel::oneshot;
+use std::pin::Pin;
 
 /// Poll state of all Futures in this crate.
 enum FutState {
     New,
-    Pending(oneshot::Receiver<()>),
+    Pending(Pin<Box<oneshot::Receiver<()>>>),
     Acquired
 }

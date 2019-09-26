@@ -1,21 +1,26 @@
 // vim: tw=80
 
-use futures::{Async, Future, Poll, sync::oneshot};
-#[cfg(feature = "tokio")] use futures::future;
-#[cfg(feature = "tokio")] use futures::future::IntoFuture;
+use futures::{
+    Future,
+    channel::oneshot,
+    task::{Context, Poll}
+};
 use std::{
     cell::UnsafeCell,
     clone::Clone,
     collections::VecDeque,
     ops::{Deref, DerefMut},
+    pin::Pin,
     sync
 };
 use super::FutState;
-#[cfg(feature = "tokio")] use tokio_executor::{self, Executor, SpawnError};
-#[cfg(feature = "tokio")] use tokio_current_thread as current_thread;
+#[cfg(feature = "tokio")] use futures::FutureExt;
+#[cfg(feature = "tokio")] use tokio;
+#[cfg(feature = "tokio")] use tokio::runtime::current_thread;
 
 /// An RAII mutex guard, much like `std::sync::MutexGuard`.  The wrapped data
 /// can be accessed via its `Deref` and `DerefMut` implementations.
+#[derive(Debug)]
 pub struct MutexGuard<T: ?Sized> {
     mutex: Mutex<T>
 }
@@ -84,39 +89,35 @@ impl<T: ?Sized> Drop for MutexFut<T> {
 }
 
 impl<T: ?Sized> Future for MutexFut<T> {
-    type Item = MutexGuard<T>;
-    type Error = ();
+    type Output = MutexGuard<T>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let (result, new_state) = match &mut self.state {
             &mut FutState::New => {
                 let mut mtx_data = self.mutex.inner.mutex.lock()
                     .expect("sync::Mutex::lock");
                 if mtx_data.owned {
-                    let (tx, mut rx) = oneshot::channel::<()>();
+                    let (tx, rx) = oneshot::channel::<()>();
+                    let mut rx_pinned = Box::pin(rx);
                     mtx_data.waiters.push_back(tx);
                     // Even though we know it isn't ready, we need to poll the
                     // receiver in order to register our task for notification.
-                    assert!(rx.poll().unwrap().is_not_ready());
-                    (Ok(Async::NotReady), FutState::Pending(rx))
+                    assert!(!Future::poll(rx_pinned.as_mut(), cx).is_ready());
+                    (Poll::Pending, FutState::Pending(rx_pinned))
                 } else {
                     mtx_data.owned = true;
                     let guard = MutexGuard{mutex: self.mutex.clone()};
-                    (Ok(Async::Ready(guard)), FutState::Acquired)
+                    (Poll::Ready(guard), FutState::Acquired)
                 }
             },
             &mut FutState::Pending(ref mut rx) => {
-                match rx.poll() {
-                    Ok(Async::NotReady) => return Ok(Async::NotReady),
-                    // It's impossible for receiver.poll() to return an error.
-                    // The only way that would happen is if the sender got
-                    // dropped.  But that can't happen because the Mutex owns
-                    // the sender, and the Fut retains a clone of the Mutex
-                    Err(_) => unreachable!(),
-                    Ok(Async::Ready(_)) => {
+                match Future::poll(rx.as_mut(), cx) {
+                    Poll::Pending => return Poll::Pending,
+                    Poll::Ready(_) => {
                         let state = FutState::Acquired;
-                        let result = Ok(Async::Ready(
-                                MutexGuard{mutex: self.mutex.clone()}));
+                        let result = Poll::Ready(
+                            MutexGuard{mutex: self.mutex.clone()}
+                        );
                         (result, state)
                     }  //LCOV_EXCL_LINE    kcov false negative
                 }
@@ -141,9 +142,9 @@ struct Inner<T: ?Sized> {
     data: UnsafeCell<T>,
 }
 
-/// `MutexWeak` is a non-owning reference to a [`Mutex`].  `MutexWeak` is to 
+/// `MutexWeak` is a non-owning reference to a [`Mutex`].  `MutexWeak` is to
 /// [`Mutex`] as [`std::sync::Weak`] is to [`std::sync::Arc`].
-/// 
+///
 /// # Examples
 /// ```
 /// # use futures_locks::{Mutex,MutexGuard};
@@ -163,7 +164,7 @@ pub struct MutexWeak<T: ?Sized> {
 }
 
 impl<T: ?Sized> MutexWeak<T> {
-    /// Tries to upgrade the `MutexWeak` to `Mutex`. If the `Mutex` was dropped 
+    /// Tries to upgrade the `MutexWeak` to `Mutex`. If the `Mutex` was dropped
     /// then the function return `None`.
     pub fn upgrade(&self) -> Option<Mutex<T>> {
         if let Some(inner) = self.inner.upgrade() {
@@ -195,12 +196,12 @@ unsafe impl<T: ?Sized + Send> Sync for MutexWeak<T> {}
 ///
 /// ```
 /// # use futures_locks::*;
-/// # use futures::executor::{Spawn, spawn};
-/// # use futures::Future;
+/// # use futures::executor::block_on;
+/// # use futures::{Future, FutureExt};
 /// # fn main() {
 /// let mtx = Mutex::<u32>::new(0);
 /// let fut = mtx.lock().map(|mut guard| { *guard += 5; });
-/// spawn(fut).wait_future();
+/// block_on(fut);
 /// assert_eq!(mtx.try_unwrap().unwrap(), 5);
 /// # }
 /// ```
@@ -352,48 +353,44 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate tokio_ as tokio;
     /// # use futures_locks::*;
-    /// # use futures::{Future, IntoFuture, lazy};
+    /// # use futures::{Future, future::ready};
     /// # use tokio::runtime::current_thread::Runtime;
     /// # fn main() {
     /// let mtx = Mutex::<u32>::new(0);
     /// let mut rt = Runtime::new().unwrap();
-    /// let r = rt.block_on(lazy(|| {
+    /// rt.block_on(async {
     ///     mtx.with(|mut guard| {
     ///         *guard += 5;
-    ///         Ok(()) as Result<(), ()>
-    ///     }).unwrap()
-    /// }));
-    /// assert!(r.is_ok());
+    ///         ready::<()>(())
+    ///     }).await
+    /// });
     /// assert_eq!(mtx.try_unwrap().unwrap(), 5);
     /// # }
     /// ```
     #[cfg(any(feature = "tokio", all(feature = "nightly-docs", rustdoc)))]
     #[cfg_attr(feature = "nightly-docs", doc(cfg(feature = "tokio")))]
-    pub fn with<F, B, R, E>(&self, f: F)
-        -> Result<impl Future<Item = R, Error = E>, SpawnError>
+    pub fn with<B, F, R>(&self, f: F)
+        -> impl Future<Output = R>
         where F: FnOnce(MutexGuard<T>) -> B + Send + 'static,
-              B: IntoFuture<Item = R, Error = E> + 'static,
-              <B as IntoFuture>::Future: Send,
+              B: Future<Output = R> + Send + 'static,
               R: Send + 'static,
-              E: Send + 'static,
               T: Send
     {
-        let (tx, rx) = oneshot::channel::<Result<R, E>>();
-        tokio_executor::DefaultExecutor::current().spawn(Box::new(self.lock()
-            .and_then(move |data| {
-                f(data).into_future()
-                       .then(move |result| {
-                           // Swallow errors; there's nothing to do if the
-                           // receiver got cancelled
-                           let _ = tx.send(result);
-                           future::ok::<(), ()>(())
-                       })
+        let (tx, rx) = oneshot::channel::<R>();
+        tokio::spawn(self.lock()
+            .then(move |data| {
+                f(data)
+                .map(move |result| {
+                    //Swallow errors; there's nothing to do if the
+                    //receiver got cancelled
+                   let _ = tx.send(result);
+               })
             })
-            // We control the sender so we're sure it won't be dropped before
-            // sending so we can unwrap safely
-        )).map(|_| rx.then(Result::unwrap))
+        );
+         //We control the sender so we're sure it won't be dropped before
+         //sending so we can unwrap safely
+        rx.map(Result::unwrap)
     }
 
     /// Like [`with`](#method.with) but for Futures that aren't `Send`.
@@ -402,49 +399,46 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate tokio_ as tokio;
     /// # use futures_locks::*;
-    /// # use futures::{Future, IntoFuture, lazy};
+    /// # use futures::{Future, future::ready};
     /// # use std::rc::Rc;
     /// # use tokio::runtime::current_thread;
     /// # fn main() {
     /// // Note: Rc is not `Send`
     /// let mtx = Mutex::<Rc<u32>>::new(Rc::new(0));
     /// let mut rt = current_thread::Runtime::new().unwrap();
-    /// let r = rt.block_on(lazy(|| {
+    /// rt.block_on(async {
     ///     mtx.with_local(|mut guard| {
     ///         *Rc::get_mut(&mut *guard).unwrap() += 5;
-    ///         Ok(()) as Result<(), ()>
-    ///     }).unwrap()
-    /// }));
-    /// assert!(r.is_ok());
+    ///         ready(())
+    ///     }).await
+    /// });
     /// assert_eq!(*mtx.try_unwrap().unwrap(), 5);
     /// # }
     /// ```
     #[cfg(any(feature = "tokio", all(feature = "nightly-docs", rustdoc)))]
     #[cfg_attr(feature = "nightly-docs", doc(cfg(feature = "tokio")))]
-    pub fn with_local<F, B, R, E>(&self, f: F)
-        -> Result<impl Future<Item = R, Error = E>, SpawnError>
+    pub fn with_local<B, F, R>(&self, f: F)
+        -> impl Future<Output = R>
         where F: FnOnce(MutexGuard<T>) -> B + 'static,
-              B: IntoFuture<Item = R, Error = E> + 'static,
-              R: 'static,
-              E: 'static
+              B: Future<Output = R> + 'static,
+              R: 'static
     {
-        let (tx, rx) = oneshot::channel::<Result<R, E>>();
-        current_thread::TaskExecutor::current().spawn_local(Box::new(
+        let (tx, rx) = oneshot::channel::<R>();
+        current_thread::TaskExecutor::current().spawn_local(Box::pin(
             self.lock()
-            .and_then(move |data| {
-                f(data).into_future()
-                       .then(move |result| {
-                           // Swallow errors; there's nothing to do if the
-                           // receiver got cancelled
-                           let _ = tx.send(result);
-                           future::ok::<(), ()>(())
-                       })
+            .then(move |data| {
+                f(data)
+                .map(move |result| {
+                    //Swallow errors; there's nothing to do if the
+                    //receiver got cancelled
+                   let _ = tx.send(result);
+               })
             })
-            // We control the sender so we're sure it won't be dropped before
-            // sending so we can unwrap safely
-        )).map(|_| rx.then(Result::unwrap))
+        )).unwrap();
+        // We control the sender so we're sure it won't be dropped before
+        // sending so we can unwrap safely
+        rx.map(Result::unwrap)
     }
 }
 
