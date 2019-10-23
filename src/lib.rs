@@ -11,15 +11,16 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate futures;
-//! # extern crate futures_locks;
 //! # use futures_locks::*;
-//! # use futures::executor::{Spawn, spawn};
-//! # use futures::Future;
+//! # use futures::executor::ThreadPool;
+//! # use futures::task::SpawnExt;
+//! # use futures::FutureExt;
 //! # fn main() {
+//! let mut executor = ThreadPool::new().unwrap();
+//!
 //! let mtx = Mutex::<u32>::new(0);
 //! let fut = mtx.lock().map(|mut guard| { *guard += 5; });
-//! spawn(fut).wait_future();
+//! executor.run(fut);
 //! assert_eq!(mtx.try_unwrap().unwrap(), 5);
 //! # }
 //! ```
@@ -29,18 +30,14 @@
 
 #![cfg_attr(feature = "nightly-docs", feature(doc_cfg))]
 
-extern crate futures;
-#[cfg(feature = "tokio")] extern crate tokio_current_thread;
-#[cfg(feature = "tokio")] extern crate tokio_executor;
-
 mod mutex;
 mod rwlock;
 
-pub use mutex::{Mutex, MutexFut, MutexGuard, MutexWeak};
+pub use crate::mutex::{Mutex, MutexFut, MutexGuard, MutexWeak};
 pub use rwlock::{RwLock, RwLockReadFut, RwLockWriteFut,
                  RwLockReadGuard, RwLockWriteGuard};
 
-use futures::sync::oneshot;
+use futures::channel::oneshot;
 
 /// Poll state of all Futures in this crate.
 enum FutState {

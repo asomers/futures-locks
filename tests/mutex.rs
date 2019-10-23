@@ -1,12 +1,14 @@
 //vim: tw=80
 
-use futures::{Future, Stream, future, lazy, stream};
-use futures::sync::oneshot;
+use std::future::Future;
+use std::task::Poll;
+use std::pin::Pin;
+use futures::channel::oneshot;
+use futures::{future, stream, StreamExt, FutureExt, TryFutureExt};
 #[cfg(feature = "tokio")]
 use std::rc::Rc;
 use tokio;
 #[cfg(feature = "tokio")]
-use tokio::runtime;
 use tokio::runtime::current_thread;
 use futures_locks::*;
 
@@ -50,28 +52,27 @@ fn mutex_eq_ptr_false() {
 
 // When a pending Mutex gets dropped, it should drain its channel and relinquish
 // ownership if a message was found.  If not, deadlocks may result.
-#[test]
-fn drop_before_poll() {
-    let mutex = Mutex::<u32>::new(0);
-    let mut rt = current_thread::Runtime::new().unwrap();
+#[tokio::test]
+async fn drop_before_poll() {
 
-    rt.block_on(lazy(|| {
+    future::poll_fn(|cx| {
+        let mutex = Mutex::<u32>::new(0);
         let mut fut1 = mutex.lock();
-        let guard1 = fut1.poll();    // fut1 immediately gets ownership
-        assert!(guard1.as_ref().unwrap().is_ready());
+        let guard1 = Pin::new(&mut fut1).poll(cx);    // fut1 immediately gets ownership
+        assert!(guard1.is_ready());
         let mut fut2 = mutex.lock();
-        assert!(!fut2.poll().unwrap().is_ready());
+        assert!(Pin::new(&mut fut2).poll(cx).is_pending());
         drop(guard1);                // ownership transfers to fut2
         drop(fut1);
         drop(fut2);                  // relinquish ownership
         let mut fut3 = mutex.lock();
-        let guard3 = fut3.poll();    // fut3 immediately gets ownership
-        assert!(guard3.as_ref().unwrap().is_ready());
-        future::ok::<(), ()>(())
-    })).unwrap();
+        let guard3 = Pin::new(&mut fut3).poll(cx);    // fut3 immediately gets ownership
+        assert!(guard3.is_ready());
+        Poll::Ready(())
+    }).await
 }
 
-// Mutably dereference a uniquely owned Mutex
+// // Mutably dereference a uniquely owned Mutex
 #[test]
 fn get_mut() {
     let mut mutex = Mutex::<u32>::new(42);
@@ -88,89 +89,80 @@ fn get_mut_cloned() {
 }
 
 // Acquire an uncontested Mutex.  poll immediately returns Async::Ready
-#[test]
-fn lock_uncontested() {
+#[tokio::test]
+async fn lock_uncontested() {
     let mutex = Mutex::<u32>::new(0);
-    let mut rt = current_thread::Runtime::new().unwrap();
 
-    let result = rt.block_on(lazy(|| {
-        mutex.lock().map(|guard| {
-            *guard + 5
-        })
-    })).unwrap();
+    let guard = mutex.lock().await;
+    let result = *guard + 5;
+
     assert_eq!(result, 5);
 }
 
 // Pend on a Mutex held by another task in the same tokio Reactor.  poll returns
 // Async::NotReady.  Later, it gets woken up without involving the OS.
-#[test]
-fn lock_contested() {
+#[tokio::test]
+async fn lock_contested() {
     let mutex = Mutex::<u32>::new(0);
-    let mut rt = current_thread::Runtime::new().unwrap();
 
-    let result = rt.block_on(lazy(|| {
-        let (tx0, rx0) = oneshot::channel::<()>();
-        let (tx1, rx1) = oneshot::channel::<()>();
-        let task0 = mutex.lock()
-            .and_then(move |mut guard| {
-                *guard += 5;
-                rx0.map_err(|_| {drop(guard);})
-            });
-        let task1 = mutex.lock().map(|guard| *guard);
-        // Readying task2 before task1 causes Tokio to poll the latter even
-        // though it's not ready
-        let task2 = rx1.map_err(|_| ()).map(|_| tx0.send(()).unwrap());
-        let task3 = lazy(move || {
-            tx1.send(()).unwrap();
-            future::ok::<(), ()>(())
+    let (tx0, rx0) = oneshot::channel::<()>();
+    let (tx1, rx1) = oneshot::channel::<()>();
+    let task0 = mutex.lock()
+        .then(move |mut guard| {
+            *guard += 5;
+            rx0.map_err(|_| {drop(guard);})
         });
-        task0.join4(task1, task2, task3)
-    }));
+    let task1 = mutex.lock().map(|guard| *guard);
+    // Readying task2 before task1 causes Tokio to poll the latter even
+    // though it's not ready
+    let task2 = rx1.map(|_| tx0.send(()).unwrap());
+    let task3 = async move {
+        tx1.send(()).unwrap();
+    };
 
-    assert_eq!(result, Ok(((), 5, (), ())));
+    let result = future::join4(task0, task1, task2, task3).await;
+    assert_eq!(result, (Ok(()), 5, (), ()));
 }
 
 // A single Mutex is contested by tasks in multiple threads
-#[test]
-fn lock_multithreaded() {
+#[tokio::test]
+async fn lock_multithreaded() {
     let mutex = Mutex::<u32>::new(0);
     let mtx_clone0 = mutex.clone();
     let mtx_clone1 = mutex.clone();
     let mtx_clone2 = mutex.clone();
     let mtx_clone3 = mutex.clone();
 
-    let parent = lazy(move || {
-        tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
-            mtx_clone0.lock().map(|mut guard| { *guard += 2 })
-        }));
-        tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
-            mtx_clone1.lock().map(|mut guard| { *guard += 3 })
-        }));
-        tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
-            mtx_clone2.lock().map(|mut guard| { *guard += 5 })
-        }));
-        tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
-            mtx_clone3.lock().map(|mut guard| { *guard += 7 })
-        }));
-        future::ok::<(), ()>(())
+    let fut1 = stream::iter(0..1000).for_each(move |_| {
+        mtx_clone0.lock().map(|mut guard| { *guard += 2 })
     });
 
-    tokio::run(parent);
+    let fut2 = stream::iter(0..1000).for_each(move |_| {
+        mtx_clone1.lock().map(|mut guard| { *guard += 3 })
+    });
+
+    let fut3 = stream::iter(0..1000).for_each(move |_| {
+        mtx_clone2.lock().map(|mut guard| { *guard += 5 })
+    });
+
+    let fut4 = stream::iter(0..1000).for_each(move |_| {
+        mtx_clone3.lock().map(|mut guard| { *guard += 7 })
+    });
+
+    future::join4(fut1, fut2, fut3, fut4).await;
+
     assert_eq!(mutex.try_unwrap().expect("try_unwrap"), 17_000);
 }
 
 // Mutexes should be acquired in the order that their Futures are waited upon.
-#[test]
-fn lock_order() {
+#[tokio::test]
+async fn lock_order() {
     let mutex = Mutex::<Vec<u32>>::new(vec![]);
     let fut2 = mutex.lock().map(|mut guard| guard.push(2));
     let fut1 = mutex.lock().map(|mut guard| guard.push(1));
-    let mut rt = current_thread::Runtime::new().unwrap();
 
-    let r = rt.block_on(lazy(|| {
-        fut1.and_then(|_| fut2)
-    }));
-    assert!(r.is_ok());
+    fut1.then(|_| fut2).await;
+
     assert_eq!(mutex.try_unwrap().unwrap(), vec![1, 2]);
 }
 
@@ -204,15 +196,15 @@ fn try_unwrap_multiply_referenced() {
 fn with_err() {
     let mtx = Mutex::<i32>::new(-5);
     let mut rt = current_thread::Runtime::new().unwrap();
-    let r = rt.block_on(lazy(|| {
+    let r = rt.block_on(async {
         mtx.with(|guard| {
             if *guard > 0 {
-                Ok(*guard)
+                future::ok(*guard)
             } else {
-                Err("Whoops!")
+                future::err("Whoops!")
             }
-        }).unwrap()
-    }));
+        }).unwrap().await
+    });
     assert_eq!(r, Err("Whoops!"));
 }
 
@@ -221,11 +213,11 @@ fn with_err() {
 fn with_ok() {
     let mtx = Mutex::<i32>::new(5);
     let mut rt = current_thread::Runtime::new().unwrap();
-    let r = rt.block_on(lazy(move || {
+    let r = rt.block_on(async move {
         mtx.with(|guard| {
-            Ok(*guard) as Result<i32, ()>
-        }).unwrap()
-    }));
+            futures::future::ok::<i32, ()>(*guard)
+        }).unwrap().await
+    });
     assert_eq!(r, Ok(5));
 }
 
@@ -233,15 +225,14 @@ fn with_ok() {
 // single-threaded Runtimes.
 // https://github.com/asomers/futures-locks/issues/5
 #[cfg(feature = "tokio")]
-#[test]
-fn with_threadpool() {
+#[tokio::test]
+async fn with_threadpool() {
     let mtx = Mutex::<i32>::new(5);
-    let mut rt = runtime::Runtime::new().unwrap();
-    let r = rt.block_on(lazy(move || {
-        mtx.with(|guard| {
-            Ok(*guard) as Result<i32, ()>
-        }).unwrap()
-    }));
+    let r = mtx.with(|guard| {
+        futures::future::ok::<i32, ()>(*guard)
+    }).unwrap().await;
+
+    assert!(r.is_ok());
     assert_eq!(r, Ok(5));
 }
 
@@ -251,10 +242,10 @@ fn with_local_ok() {
     // Note: Rc is not Send
     let mtx = Mutex::<Rc<i32>>::new(Rc::new(5));
     let mut rt = current_thread::Runtime::new().unwrap();
-    let r = rt.block_on(lazy(move || {
+    let r = rt.block_on(async move {
         mtx.with_local(|guard| {
-            Ok(**guard) as Result<i32, ()>
-        }).unwrap()
-    }));
+            futures::future::ok::<i32, ()>(**guard)
+        }).await
+    });
     assert_eq!(r, Ok(5));
 }

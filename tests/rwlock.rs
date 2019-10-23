@@ -1,12 +1,12 @@
 //vim: tw=80
 
-use futures::{Future, Stream, future, lazy, stream};
-use futures::sync::oneshot;
+use std::pin::Pin;
+use std::task::Poll;
+use futures::{Future, FutureExt, TryFutureExt, StreamExt, future, stream};
+use futures::channel::oneshot;
 #[cfg(feature = "tokio")]
 use std::rc::Rc;
 use tokio;
-#[cfg(feature = "tokio")]
-use tokio::runtime;
 use tokio::runtime::current_thread;
 use futures_locks::*;
 
@@ -18,20 +18,20 @@ fn drop_exclusive_before_poll() {
     let rwlock = RwLock::<u32>::new(42);
     let mut rt = current_thread::Runtime::new().unwrap();
 
-    rt.block_on(lazy(|| {
+    rt.block_on(future::poll_fn(|cx| {
         let mut fut1 = rwlock.read();
-        let guard1 = fut1.poll();       // fut1 immediately gets ownership
-        assert!(guard1.as_ref().unwrap().is_ready());
+        let guard1 = Pin::new(&mut fut1).poll(cx);       // fut1 immediately gets ownership
+        assert!(guard1.is_ready());
         let mut fut2 = rwlock.write();
-        assert!(!fut2.poll().unwrap().is_ready());
+        assert!(Pin::new(&mut fut2).poll(cx).is_pending());
         drop(guard1);                   // ownership transfers to fut2
         //drop(fut1);
         drop(fut2);                     // relinquish ownership
         let mut fut3 = rwlock.read();
-        let guard3 = fut3.poll();       // fut3 immediately gets ownership
-        assert!(guard3.as_ref().unwrap().is_ready());
-        future::ok::<(), ()>(())
-    })).unwrap();
+        let guard3 = Pin::new(&mut fut3).poll(cx);       // fut3 immediately gets ownership
+        assert!(guard3.is_ready());
+        Poll::Ready(())
+    }));
 }
 
 // When an nonexclusively owned but not yet polled RwLock future is dropped, it
@@ -41,20 +41,20 @@ fn drop_shared_before_poll() {
     let rwlock = RwLock::<u32>::new(42);
     let mut rt = current_thread::Runtime::new().unwrap();
 
-    rt.block_on(lazy(|| {
+    rt.block_on(future::poll_fn(|cx| {
         let mut fut1 = rwlock.write();
-        let guard1 = fut1.poll();       // fut1 immediately gets ownership
-        assert!(guard1.as_ref().unwrap().is_ready());
+        let guard1 = Pin::new(&mut fut1).poll(cx);       // fut1 immediately gets ownership
+        assert!(guard1.is_ready());
         let mut fut2 = rwlock.read();
-        assert!(!fut2.poll().unwrap().is_ready());
+        assert!(Pin::new(&mut fut2).poll(cx).is_pending());
         drop(guard1);                   // ownership transfers to fut2
         //drop(fut1);
         drop(fut2);                     // relinquish ownership
         let mut fut3 = rwlock.write();
-        let guard3 = fut3.poll();       // fut3 immediately gets ownership
-        assert!(guard3.as_ref().unwrap().is_ready());
-        future::ok::<(), ()>(())
-    })).unwrap();
+        let guard3 = Pin::new(&mut fut3).poll(cx);       // fut3 immediately gets ownership
+        assert!(guard3.is_ready());
+        Poll::Ready(())
+    }));
 }
 
 // Mutably dereference a uniquely owned RwLock
@@ -79,23 +79,23 @@ fn read_shared() {
     let rwlock = RwLock::<u32>::new(42);
     let mut rt = current_thread::Runtime::new().unwrap();
 
-    let result = rt.block_on(lazy(|| {
+    let result = rt.block_on(async {
         let (tx0, rx0) = oneshot::channel::<()>();
         let (tx1, rx1) = oneshot::channel::<()>();
         let task0 = rwlock.read()
-            .and_then(move |guard| {
+            .then(move |guard| {
                 tx1.send(()).unwrap();
-                rx0.map(move |_| *guard).map_err(|_| ())
+                rx0.map(move |_| *guard)
             });
         let task1 = rwlock.read()
-            .and_then(move |guard| {
+            .then(move |guard| {
                 tx0.send(()).unwrap();
-                rx1.map(move |_| *guard).map_err(|_| ())
+                rx1.map(move |_| *guard)
             });
-        task0.join(task1)
-    }));
+        future::join(task0, task1).await
+    });
 
-    assert_eq!(result, Ok((42, 42)));
+    assert_eq!(result, (42, 42));
 }
 
 // Acquire an RwLock nonexclusively by a single task
@@ -104,11 +104,11 @@ fn read_uncontested() {
     let rwlock = RwLock::<u32>::new(42);
     let mut rt = current_thread::Runtime::new().unwrap();
 
-    let result = rt.block_on(lazy(|| {
+    let result = rt.block_on(async {
         rwlock.read().map(|guard| {
             *guard
-        })
-    })).unwrap();
+        }).await
+    });
 
     assert_eq!(result, 42);
 }
@@ -119,11 +119,11 @@ fn read_contested() {
     let rwlock = RwLock::<u32>::new(0);
     let mut rt = current_thread::Runtime::new().unwrap();
 
-    let result = rt.block_on(lazy(|| {
+    let result = rt.block_on(async {
         let (tx0, rx0) = oneshot::channel::<()>();
         let (tx1, rx1) = oneshot::channel::<()>();
         let task0 = rwlock.write()
-            .and_then(move |mut guard| {
+            .then(move |mut guard| {
                 *guard += 5;
                 rx0.map_err(|_| {drop(guard);})
             });
@@ -132,14 +132,12 @@ fn read_contested() {
         // Readying task3 before task1 and task2 causes Tokio to poll the latter
         // even though they're not ready
         let task3 = rx1.map_err(|_| ()).map(|_| tx0.send(()).unwrap());
-        let task4 = lazy(move || {
-            tx1.send(()).unwrap();
-            future::ok::<(), ()>(())
-        });
-        task0.join5(task1, task2, task3, task4)
-    }));
+        let task4 = async { tx1.send(()) };
 
-    assert_eq!(result, Ok(((), 5, 5, (), ())));
+        future::join5(task0, task1, task2, task3, task4).await
+   });
+
+   assert_eq!(result, (Ok(()), 5, 5, (), Ok(())));
 }
 
 // Attempt to acquire an rwlock exclusively when it already has a reader.
@@ -157,26 +155,25 @@ fn read_write_contested() {
     let rwlock = RwLock::<u32>::new(42);
     let mut rt = current_thread::Runtime::new().unwrap();
 
-    let result = rt.block_on(lazy(|| {
+    let result = rt.block_on(async {
         let (tx0, rx0) = oneshot::channel::<()>();
         let (tx1, rx1) = oneshot::channel::<()>();
         let task0 = rwlock.read()
-            .and_then(move |guard| {
-                rx0.map(move |_| { *guard }).map_err(|_| ())
+            .then(move |guard| {
+                rx0.map(move |_| { *guard })
             });
         let task1 = rwlock.write().map(|mut guard| *guard += 1);
         let task2 = rwlock.read().map(|guard| *guard);
         // Readying task3 before task1 and task2 causes Tokio to poll the latter
         // even though they're not ready
         let task3 = rx1.map_err(|_| ()).map(|_| tx0.send(()).unwrap());
-        let task4 = lazy(move || {
+        let task4 = async move {
             tx1.send(()).unwrap();
-            future::ok::<(), ()>(())
-        });
-        task0.join5(task1, task2, task3, task4)
-    }));
+        };
+        future::join5(task0, task1, task2, task3, task4).await
+    });
 
-    assert_eq!(result, Ok((42, (), 42, (), ())));
+    assert_eq!(result, (42, (), 42, (), ()));
     assert_eq!(rwlock.try_unwrap().expect("try_unwrap"), 43);
 }
 
@@ -221,11 +218,11 @@ fn write_uncontested() {
     let rwlock = RwLock::<u32>::new(0);
     let mut rt = current_thread::Runtime::new().unwrap();
 
-    rt.block_on(lazy(|| {
+    rt.block_on(async {
         rwlock.write().map(|mut guard| {
             *guard += 5;
-        })
-    })).unwrap();
+        }).await
+    });
     assert_eq!(rwlock.try_unwrap().expect("try_unwrap"), 5);
 }
 
@@ -237,26 +234,25 @@ fn write_contested() {
     let rwlock = RwLock::<u32>::new(0);
     let mut rt = current_thread::Runtime::new().unwrap();
 
-    let result = rt.block_on(lazy(|| {
+    let result = rt.block_on(async {
         let (tx0, rx0) = oneshot::channel::<()>();
         let (tx1, rx1) = oneshot::channel::<()>();
         let task0 = rwlock.write()
-            .and_then(move |mut guard| {
+            .then(move |mut guard| {
                 *guard += 5;
                 rx0.map_err(|_| {drop(guard);})
             });
         let task1 = rwlock.write().map(|guard| *guard);
         // Readying task2 before task1 causes Tokio to poll the latter
         // even though it's not ready
-        let task2 = rx1.map_err(|_| ()).map(|_| tx0.send(()).unwrap());
-        let task3 = lazy(move || {
+        let task2 = rx1.map(|_| tx0.send(()).unwrap());
+        let task3 = async move {
             tx1.send(()).unwrap();
-            future::ok::<(), ()>(())
-        });
-        task0.join4(task1, task2, task3)
-    }));
+        };
+        future::join4(task0, task1, task2, task3).await
+    });
 
-    assert_eq!(result, Ok(((), 5, (), ())));
+    assert_eq!(result, (Ok(()), 5, (), ()));
 }
 
 // RwLocks should be acquired in the order that their Futures are waited upon.
@@ -267,47 +263,43 @@ fn write_order() {
     let fut1 = rwlock.write().map(|mut guard| guard.push(1));
     let mut rt = current_thread::Runtime::new().unwrap();
 
-    let r = rt.block_on(lazy(|| {
-        fut1.and_then(|_| fut2)
-    }));
-    assert!(r.is_ok());
+    rt.block_on(async {
+        fut1.then(|_| fut2).await
+    });
     assert_eq!(rwlock.try_unwrap().unwrap(), vec![1, 2]);
 }
 
 // A single RwLock is contested by tasks in multiple threads
-#[test]
-fn multithreaded() {
+#[tokio::test]
+async fn multithreaded() {
     let rwlock = RwLock::<u32>::new(0);
     let rwlock_clone0 = rwlock.clone();
     let rwlock_clone1 = rwlock.clone();
     let rwlock_clone2 = rwlock.clone();
     let rwlock_clone3 = rwlock.clone();
 
-    let parent = lazy(move || {
-        tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
-            let rwlock_clone4 = rwlock_clone0.clone();
-            rwlock_clone0.write().map(|mut guard| { *guard += 2 })
-                .and_then(move |_| rwlock_clone4.read().map(|_| ()))
-        }));
-        tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
-            let rwlock_clone5 = rwlock_clone1.clone();
-            rwlock_clone1.write().map(|mut guard| { *guard += 3 })
-                .and_then(move |_| rwlock_clone5.read().map(|_| ()))
-        }));
-        tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
-            let rwlock_clone6 = rwlock_clone2.clone();
-            rwlock_clone2.write().map(|mut guard| { *guard += 5 })
-                .and_then(move |_| rwlock_clone6.read().map(|_| ()))
-        }));
-        tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
-            let rwlock_clone7 = rwlock_clone3.clone();
-            rwlock_clone3.write().map(|mut guard| { *guard += 7 })
-                .and_then(move |_| rwlock_clone7.read().map(|_| ()))
-        }));
-        future::ok::<(), ()>(())
+    let fut1 = stream::iter(0..1000).for_each(move |_| {
+        let rwlock_clone4 = rwlock_clone0.clone();
+        rwlock_clone0.write().map(|mut guard| { *guard += 2 })
+            .then(move |_| rwlock_clone4.read().map(|_| ()))
+    });
+    let fut2 = stream::iter(0..1000).for_each(move |_| {
+        let rwlock_clone5 = rwlock_clone1.clone();
+        rwlock_clone1.write().map(|mut guard| { *guard += 3 })
+            .then(move |_| rwlock_clone5.read().map(|_| ()))
+    });
+    let fut3 = stream::iter(0..1000).for_each(move |_| {
+        let rwlock_clone6 = rwlock_clone2.clone();
+        rwlock_clone2.write().map(|mut guard| { *guard += 5 })
+            .then(move |_| rwlock_clone6.read().map(|_| ()))
+    });
+    let fut4 = stream::iter(0..1000).for_each(move |_| {
+        let rwlock_clone7 = rwlock_clone3.clone();
+        rwlock_clone3.write().map(|mut guard| { *guard += 7 })
+            .then(move |_| rwlock_clone7.read().map(|_| ()))
     });
 
-    tokio::run(parent);
+    future::join4(fut1, fut2, fut3, fut4).await;
     assert_eq!(rwlock.try_unwrap().expect("try_unwrap"), 17_000);
 }
 
@@ -317,15 +309,15 @@ fn with_read_err() {
     let mtx = RwLock::<i32>::new(-5);
     let mut rt = current_thread::Runtime::new().unwrap();
 
-    let r = rt.block_on(lazy(move || {
+    let r = rt.block_on(async {
         mtx.with_read(|guard| {
             if *guard > 0 {
-                Ok(*guard)
+                future::ok(*guard)
             } else {
-                Err("Whoops!")
+                future::err("Whoops!")
             }
-        }).unwrap()
-    }));
+        }).unwrap().await
+    });
     assert_eq!(r, Err("Whoops!"));
 }
 
@@ -335,11 +327,11 @@ fn with_read_ok() {
     let mtx = RwLock::<i32>::new(5);
     let mut rt = current_thread::Runtime::new().unwrap();
 
-    let r = rt.block_on(lazy(move || {
+    let r = rt.block_on(async {
         mtx.with_read(|guard| {
-            Ok(*guard) as Result<i32, ()>
-        }).unwrap()
-    }));
+            futures::future::ok::<i32, ()>(*guard)
+        }).unwrap().await
+    });
     assert_eq!(r, Ok(5));
 }
 
@@ -347,16 +339,14 @@ fn with_read_ok() {
 // single-threaded Runtimes.
 // https://github.com/asomers/futures-locks/issues/5
 #[cfg(feature = "tokio")]
-#[test]
-fn with_read_threadpool() {
+#[tokio::test]
+async fn with_read_threadpool() {
     let mtx = RwLock::<i32>::new(5);
-    let mut rt = runtime::Runtime::new().unwrap();
 
-    let r = rt.block_on(lazy(move || {
-        mtx.with_read(|guard| {
-            Ok(*guard) as Result<i32, ()>
-        }).unwrap()
-    }));
+    let r = mtx.with_read(|guard| {
+        futures::future::ok::<i32, ()>(*guard)
+    }).unwrap().await;
+
     assert_eq!(r, Ok(5));
 }
 
@@ -366,11 +356,11 @@ fn with_read_local_ok() {
     // Note: Rc is not Send
     let rwlock = RwLock::<Rc<i32>>::new(Rc::new(5));
     let mut rt = current_thread::Runtime::new().unwrap();
-    let r = rt.block_on(lazy(move || {
+    let r = rt.block_on(async move {
         rwlock.with_read_local(|guard| {
-            Ok(**guard) as Result<i32, ()>
-        }).unwrap()
-    }));
+            futures::future::ok::<i32, ()>(**guard)
+        }).await
+    });
     assert_eq!(r, Ok(5));
 }
 
@@ -380,16 +370,16 @@ fn with_write_err() {
     let mtx = RwLock::<i32>::new(-5);
     let mut rt = current_thread::Runtime::new().unwrap();
 
-    let r = rt.block_on(lazy(move || {
+    let r = rt.block_on(async move {
         mtx.with_write(|mut guard| {
             if *guard > 0 {
                 *guard -= 1;
-                Ok(())
+                future::ok(())
             } else {
-                Err("Whoops!")
+                future::err("Whoops!")
             }
-        }).unwrap()
-    }));
+        }).unwrap().await
+    });
     assert_eq!(r, Err("Whoops!"));
 }
 
@@ -399,13 +389,12 @@ fn with_write_ok() {
     let mtx = RwLock::<i32>::new(5);
     let mut rt = current_thread::Runtime::new().unwrap();
 
-    let r = rt.block_on(lazy(|| {
+    rt.block_on(async {
         mtx.with_write(|mut guard| {
             *guard += 1;
-            Ok(()) as Result<(), ()>
-        }).unwrap()
-    }));
-    assert!(r.is_ok());
+            future::ok::<(), ()>(())
+        }).unwrap().await
+    }).unwrap();
     assert_eq!(mtx.try_unwrap().unwrap(), 6);
 }
 
@@ -413,18 +402,18 @@ fn with_write_ok() {
 // single-threaded Runtimes.
 // https://github.com/asomers/futures-locks/issues/5
 #[cfg(feature = "tokio")]
-#[test]
-fn with_write_threadpool() {
+#[tokio::test]
+async fn with_write_threadpool() {
     let mtx = RwLock::<i32>::new(5);
     let test_mtx = mtx.clone();
-    let mut rt = runtime::Runtime::new().unwrap();
 
-    let r = rt.block_on(lazy(move || {
+    let r = async move {
         mtx.with_write(|mut guard| {
             *guard += 1;
-            Ok(()) as Result<(), ()>
-        }).unwrap()
-    }));
+            future::ok::<(), ()>(())
+        }).unwrap().await
+    }.await;
+
     assert!(r.is_ok());
     assert_eq!(test_mtx.try_unwrap().unwrap(), 6);
 }
@@ -435,12 +424,12 @@ fn with_write_local_ok() {
     // Note: Rc is not Send
     let rwlock = RwLock::<Rc<i32>>::new(Rc::new(5));
     let mut rt = current_thread::Runtime::new().unwrap();
-    let r = rt.block_on(lazy(|| {
+    rt.block_on(async {
         rwlock.with_write_local(|mut guard| {
             *Rc::get_mut(&mut *guard).unwrap() += 1;
-            Ok(()) as Result<(), ()>
-        }).unwrap()
-    }));
-    assert!(r.is_ok());
+            future::ok::<(), ()>(())
+        }).await.unwrap()
+    });
+
     assert_eq!(*rwlock.try_unwrap().unwrap(), 6);
 }
