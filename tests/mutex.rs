@@ -50,7 +50,7 @@ fn mutex_eq_ptr_false() {
 // When a pending Mutex gets dropped, it should drain its channel and relinquish
 // ownership if a message was found.  If not, deadlocks may result.
 #[test]
-fn drop_before_poll() {
+fn drop_before_poll_returns_ready() {
     let mutex = Mutex::<u32>::new(0);
     let mut rt = current_thread::Runtime::new().unwrap();
 

@@ -13,7 +13,7 @@ use futures_locks::*;
 // When an exclusively owned but not yet polled RwLock future is dropped, it
 // should relinquish ownership.  If not, deadlocks may result.
 #[test]
-fn drop_exclusive_before_poll() {
+fn drop_exclusive_before_poll_returns_ready() {
     let rwlock = RwLock::<u32>::new(42);
     let mut rt = current_thread::Runtime::new().unwrap();
 
@@ -24,7 +24,6 @@ fn drop_exclusive_before_poll() {
         let mut fut2 = rwlock.write();
         assert!(!fut2.poll().unwrap().is_ready());
         drop(guard1);                   // ownership transfers to fut2
-        //drop(fut1);
         drop(fut2);                     // relinquish ownership
         let mut fut3 = rwlock.read();
         let guard3 = fut3.poll();       // fut3 immediately gets ownership
@@ -36,7 +35,7 @@ fn drop_exclusive_before_poll() {
 // When an nonexclusively owned but not yet polled RwLock future is dropped, it
 // should relinquish ownership.  If not, deadlocks may result.
 #[test]
-fn drop_shared_before_poll() {
+fn drop_shared_before_poll_returns_ready() {
     let rwlock = RwLock::<u32>::new(42);
     let mut rt = current_thread::Runtime::new().unwrap();
 
@@ -47,7 +46,6 @@ fn drop_shared_before_poll() {
         let mut fut2 = rwlock.read();
         assert!(!fut2.poll().unwrap().is_ready());
         drop(guard1);                   // ownership transfers to fut2
-        //drop(fut1);
         drop(fut2);                     // relinquish ownership
         let mut fut3 = rwlock.write();
         let guard3 = fut3.poll();       // fut3 immediately gets ownership
