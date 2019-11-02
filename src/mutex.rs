@@ -322,13 +322,15 @@ impl<T: ?Sized> Mutex<T> {
     fn unlock(&self) {
         let mut mtx_data = self.inner.mutex.lock().expect("sync::Mutex::lock");
         assert!(mtx_data.owned);
-        if let Some(tx) = mtx_data.waiters.pop_front() {
-            // Send ownership to the waiter
-            tx.send(()).expect("Sender::send");
-        } else {
-            // Relinquish ownership
-            mtx_data.owned = false;
+
+        while let Some(tx) = mtx_data.waiters.pop_front() {
+            if tx.send(()).is_ok() {
+                return;
+            }
+            // An error indicates that the waiter's future was dropped
         }
+        // Relinquish ownership
+        mtx_data.owned = false;
     }
 
     /// Returns true if the two `Mutex` point to the same data else false.

@@ -10,8 +10,9 @@ use tokio::runtime::current_thread;
 use futures_locks::*;
 
 
-// When an exclusively owned but not yet polled RwLock future is dropped, it
-// should relinquish ownership.  If not, deadlocks may result.
+// When an exclusively owned RwLock future is dropped after gaining ownership
+// but before begin polled, it should relinquish ownership.  If not, deadlocks
+// may result.
 #[test]
 fn drop_exclusive_before_poll_returns_ready() {
     let rwlock = RwLock::<u32>::new(42);
@@ -32,8 +33,57 @@ fn drop_exclusive_before_poll_returns_ready() {
     })).unwrap();
 }
 
-// When an nonexclusively owned but not yet polled RwLock future is dropped, it
-// should relinquish ownership.  If not, deadlocks may result.
+// When a pending exclusive RwLock gets dropped after being polled() but before
+// gaining ownership, ownership should pass on to the next waiter.
+#[test]
+fn drop_exclusive_before_ready() {
+    let rwlock = RwLock::<u32>::new(42);
+    let mut rt = current_thread::Runtime::new().unwrap();
+
+    rt.block_on(lazy(|| {
+        let mut fut1 = rwlock.read();
+        let guard1 = fut1.poll();    // fut1 immediately gets ownership
+        assert!(guard1.as_ref().unwrap().is_ready());
+        let mut fut2 = rwlock.write();
+        assert!(!fut2.poll().unwrap().is_ready());
+        let mut fut3 = rwlock.write();
+        assert!(!fut3.poll().unwrap().is_ready());
+        drop(fut2);                  // drop before gaining ownership
+        drop(guard1);                // ownership transfers to fut3
+        drop(fut1);
+        let guard3 = fut3.poll();
+        assert!(guard3.as_ref().unwrap().is_ready());
+        future::ok::<(), ()>(())
+    })).unwrap();
+}
+
+// Like drop_exclusive_before_ready, but the rwlock is already locked in
+// exclusive mode.
+#[test]
+fn drop_exclusive_before_ready_2() {
+    let rwlock = RwLock::<u32>::new(42);
+    let mut rt = current_thread::Runtime::new().unwrap();
+
+    rt.block_on(lazy(|| {
+        let mut fut1 = rwlock.write();
+        let guard1 = fut1.poll();    // fut1 immediately gets ownership
+        assert!(guard1.as_ref().unwrap().is_ready());
+        let mut fut2 = rwlock.write();
+        assert!(!fut2.poll().unwrap().is_ready());
+        let mut fut3 = rwlock.write();
+        assert!(!fut3.poll().unwrap().is_ready());
+        drop(fut2);                  // drop before gaining ownership
+        drop(guard1);                // ownership transfers to fut3
+        drop(fut1);
+        let guard3 = fut3.poll();
+        assert!(guard3.as_ref().unwrap().is_ready());
+        future::ok::<(), ()>(())
+    })).unwrap();
+}
+
+// When a nonexclusively owned RwLock future is dropped after gaining ownership
+// but before begin polled, it should relinquish ownership.  If not, deadlocks
+// may result.
 #[test]
 fn drop_shared_before_poll_returns_ready() {
     let rwlock = RwLock::<u32>::new(42);
@@ -49,6 +99,30 @@ fn drop_shared_before_poll_returns_ready() {
         drop(fut2);                     // relinquish ownership
         let mut fut3 = rwlock.write();
         let guard3 = fut3.poll();       // fut3 immediately gets ownership
+        assert!(guard3.as_ref().unwrap().is_ready());
+        future::ok::<(), ()>(())
+    })).unwrap();
+}
+
+// When a pending shared RwLock gets dropped after being polled() but before
+// gaining ownership, ownership should pass on to the next waiter.
+#[test]
+fn drop_shared_before_ready() {
+    let rwlock = RwLock::<u32>::new(42);
+    let mut rt = current_thread::Runtime::new().unwrap();
+
+    rt.block_on(lazy(|| {
+        let mut fut1 = rwlock.write();
+        let guard1 = fut1.poll();    // fut1 immediately gets ownership
+        assert!(guard1.as_ref().unwrap().is_ready());
+        let mut fut2 = rwlock.read();
+        assert!(!fut2.poll().unwrap().is_ready());
+        let mut fut3 = rwlock.read();
+        assert!(!fut3.poll().unwrap().is_ready());
+        drop(fut2);                  // drop before gaining ownership
+        drop(guard1);                // ownership transfers to fut3
+        drop(fut1);
+        let guard3 = fut3.poll();
         assert!(guard3.as_ref().unwrap().is_ready());
         future::ok::<(), ()>(())
     })).unwrap();
