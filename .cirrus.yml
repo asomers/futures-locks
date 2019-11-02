@@ -31,7 +31,7 @@ test_task:
 codecov_task:
   name: codecov 
   depends_on:
-    - test
+    - cargo test
   environment:
     CODECOV_TOKEN: ENCRYPTED[8cd2d4365a2079c3ee4c4d7ce9cbb8ac440cd341f9e688318b923f026c7d8bfbdb0556c2c238a67b3f44dd396f25b1f5]
     # Improves coverage accuracy
