@@ -450,15 +450,15 @@ impl<T: ?Sized> RwLock<T> {
         assert!(lock_data.num_readers > 0);
         assert!(!lock_data.exclusive);
         assert_eq!(lock_data.read_waiters.len(), 0);
-        if lock_data.num_readers == 1 {
-            if let Some(tx) = lock_data.write_waiters.pop_front() {
-                lock_data.num_readers -= 1;
-                lock_data.exclusive = true;
-                tx.send(()).expect("Sender::send");
-                return;
+        lock_data.num_readers -= 1;
+        if lock_data.num_readers == 0 {
+            while let Some(tx) = lock_data.write_waiters.pop_front() {
+                if tx.send(()).is_ok() {
+                    lock_data.exclusive = true;
+                    return
+                }
             }
         }
-        lock_data.num_readers -= 1;
     }
 
     /// Release an exclusive lock of an `RwLock`.
@@ -466,14 +466,21 @@ impl<T: ?Sized> RwLock<T> {
         let mut lock_data = self.inner.mutex.lock().expect("sync::Mutex::lock");
         assert!(lock_data.num_readers == 0);
         assert!(lock_data.exclusive);
-        if let Some(tx) = lock_data.write_waiters.pop_front() {
-            tx.send(()).expect("Sender::send");
-        } else {
-            lock_data.exclusive = false;
-            lock_data.num_readers += lock_data.read_waiters.len() as u32;
-            for tx in lock_data.read_waiters.drain(..) {
-                tx.send(()).expect("Sender::send");
+
+        // First try to wake up any writers
+        while let Some(tx) = lock_data.write_waiters.pop_front() {
+            if tx.send(()).is_ok() {
+                return;
             }
+        }
+
+        // If there are no writers, try to wake up readers
+        lock_data.exclusive = false;
+        lock_data.num_readers += lock_data.read_waiters.len() as u32;
+        for tx in lock_data.read_waiters.drain(..) {
+            // Ignore errors, which are due to a reader's future getting
+            // dropped before it was ready
+            let _ = tx.send(());
         }
     }
 }

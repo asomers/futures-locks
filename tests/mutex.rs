@@ -48,10 +48,11 @@ fn mutex_eq_ptr_false() {
     assert!(!Mutex::ptr_eq(&mutex, &mutex_other));
 }
 
-// When a pending Mutex gets dropped, it should drain its channel and relinquish
-// ownership if a message was found.  If not, deadlocks may result.
+// When a Mutex gets dropped after gaining ownership but before being polled, it
+// should drain its channel and relinquish ownership if a message was found.  If
+// not, deadlocks may result.
 #[test]
-fn drop_before_poll_returns_ready() {
+fn drop_when_ready() {
     let mutex = Mutex::<u32>::new(0);
     let mut rt = current_thread::Runtime::new().unwrap();
 
@@ -66,6 +67,30 @@ fn drop_before_poll_returns_ready() {
         drop(fut2);                  // relinquish ownership
         let mut fut3 = mutex.lock();
         let guard3 = fut3.poll();    // fut3 immediately gets ownership
+        assert!(guard3.as_ref().unwrap().is_ready());
+        future::ok::<(), ()>(())
+    })).unwrap();
+}
+
+// When a pending Mutex gets dropped after being polled() but before gaining
+// ownership, ownership should pass on to the next waiter.
+#[test]
+fn drop_before_ready() {
+    let mutex = Mutex::<u32>::new(0);
+    let mut rt = current_thread::Runtime::new().unwrap();
+
+    rt.block_on(lazy(|| {
+        let mut fut1 = mutex.lock();
+        let guard1 = fut1.poll();    // fut1 immediately gets ownership
+        assert!(guard1.as_ref().unwrap().is_ready());
+        let mut fut2 = mutex.lock();
+        assert!(!fut2.poll().unwrap().is_ready());
+        let mut fut3 = mutex.lock();
+        assert!(!fut3.poll().unwrap().is_ready());
+        drop(fut2);                  // drop before gaining ownership
+        drop(guard1);                // ownership transfers to fut3
+        drop(fut1);
+        let guard3 = fut3.poll();
         assert!(guard3.as_ref().unwrap().is_ready());
         future::ok::<(), ()>(())
     })).unwrap();
