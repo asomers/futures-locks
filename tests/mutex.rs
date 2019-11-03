@@ -1,7 +1,6 @@
 //vim: tw=80
 
 use futures::{Future, Stream, future, lazy, stream};
-use futures::sync::oneshot;
 #[cfg(feature = "tokio")]
 use std::rc::Rc;
 use tokio;
@@ -108,26 +107,19 @@ fn lock_contested() {
     let mutex = Mutex::<u32>::new(0);
     let mut rt = current_thread::Runtime::new().unwrap();
 
-    let result = rt.block_on(lazy(|| {
-        let (tx0, rx0) = oneshot::channel::<()>();
-        let (tx1, rx1) = oneshot::channel::<()>();
-        let task0 = mutex.lock()
-            .and_then(move |mut guard| {
-                *guard += 5;
-                rx0.map_err(|_| {drop(guard);})
-            });
-        let task1 = mutex.lock().map(|guard| *guard);
-        // Readying task2 before task1 causes Tokio to poll the latter even
-        // though it's not ready
-        let task2 = rx1.map_err(|_| ()).map(|_| tx0.send(()).unwrap());
-        let task3 = lazy(move || {
-            tx1.send(()).unwrap();
-            future::ok::<(), ()>(())
-        });
-        task0.join4(task1, task2, task3)
-    }));
+    rt.block_on(lazy(|| {
+        let mut fut0 = mutex.lock();
+        let guard0 = fut0.poll();    // fut0 immediately gets ownership
+        assert!(guard0.as_ref().unwrap().is_ready());
 
-    assert_eq!(result, Ok(((), 5, (), ())));
+        let mut fut1 = mutex.lock();
+        assert!(!fut1.poll().unwrap().is_ready());  // fut1 is blocked
+
+        drop(guard0);               // Ownership transfers to fut1
+        let guard1 = fut1.poll();
+        assert!(guard1.as_ref().unwrap().is_ready());
+        future::ok::<(), ()>(())
+    })).unwrap();
 }
 
 // A single Mutex is contested by tasks in multiple threads

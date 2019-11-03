@@ -1,7 +1,6 @@
 //vim: tw=80
 
 use futures::{Future, Stream, future, lazy, stream};
-use futures::sync::oneshot;
 #[cfg(feature = "tokio")]
 use std::rc::Rc;
 use tokio;
@@ -79,23 +78,16 @@ fn read_shared() {
     let rwlock = RwLock::<u32>::new(42);
     let mut rt = current_thread::Runtime::new().unwrap();
 
-    let result = rt.block_on(lazy(|| {
-        let (tx0, rx0) = oneshot::channel::<()>();
-        let (tx1, rx1) = oneshot::channel::<()>();
-        let task0 = rwlock.read()
-            .and_then(move |guard| {
-                tx1.send(()).unwrap();
-                rx0.map(move |_| *guard).map_err(|_| ())
-            });
-        let task1 = rwlock.read()
-            .and_then(move |guard| {
-                tx0.send(()).unwrap();
-                rx1.map(move |_| *guard).map_err(|_| ())
-            });
-        task0.join(task1)
-    }));
+    rt.block_on(lazy(|| {
+        let mut fut0 = rwlock.read();
+        let guard0 = fut0.poll();       // fut0 immediately gets ownership
+        assert!(guard0.as_ref().unwrap().is_ready());
 
-    assert_eq!(result, Ok((42, 42)));
+        let mut fut1 = rwlock.read();
+        let guard1 = fut1.poll();       // fut1 also gets ownership
+        assert!(guard1.as_ref().unwrap().is_ready());
+        future::ok::<(), ()>(())
+    })).unwrap();
 }
 
 // Acquire an RwLock nonexclusively by a single task
@@ -115,69 +107,65 @@ fn read_uncontested() {
 
 // Attempt to acquire an RwLock for reading that already has a writer
 #[test]
-fn read_contested() {
+fn write_read_contested() {
     let rwlock = RwLock::<u32>::new(0);
     let mut rt = current_thread::Runtime::new().unwrap();
 
-    let result = rt.block_on(lazy(|| {
-        let (tx0, rx0) = oneshot::channel::<()>();
-        let (tx1, rx1) = oneshot::channel::<()>();
-        let task0 = rwlock.write()
-            .and_then(move |mut guard| {
-                *guard += 5;
-                rx0.map_err(|_| {drop(guard);})
-            });
-        let task1 = rwlock.read().map(|guard| *guard);
-        let task2 = rwlock.read().map(|guard| *guard);
-        // Readying task3 before task1 and task2 causes Tokio to poll the latter
-        // even though they're not ready
-        let task3 = rx1.map_err(|_| ()).map(|_| tx0.send(()).unwrap());
-        let task4 = lazy(move || {
-            tx1.send(()).unwrap();
-            future::ok::<(), ()>(())
-        });
-        task0.join5(task1, task2, task3, task4)
-    }));
+    rt.block_on(lazy(|| {
+        let mut fut0 = rwlock.write();
+        let guard0 = fut0.poll();       // fut0 immediately gets ownership
+        assert!(guard0.as_ref().unwrap().is_ready());
 
-    assert_eq!(result, Ok(((), 5, 5, (), ())));
+        let mut fut1 = rwlock.read();
+        assert!(!fut1.poll().unwrap().is_ready());  // fut1 is blocked
+
+        drop(guard0);                   // Ownership transfers to fut1
+        let guard1 = fut1.poll();
+        assert!(guard1.as_ref().unwrap().is_ready());
+        future::ok::<(), ()>(())
+    })).unwrap();
 }
 
 // Attempt to acquire an rwlock exclusively when it already has a reader.
-// 1) task0 will run first, reading the rwlock's original value and blocking on
-//    rx.
-// 2) task1 will run next, but block on acquiring rwlock.
-// 3) task2 will run next, reading the rwlock's value and returning immediately.
-// 4) task3 will run next, waking up task0 with the oneshot
-// 5) finally task1 will acquire the rwlock and increment it.
-//
-// If RwLock::write is allowed to acquire an RwLock with readers, then task1
-// would erroneously run before task2, and task2 would return the wrong value.
 #[test]
 fn read_write_contested() {
     let rwlock = RwLock::<u32>::new(42);
     let mut rt = current_thread::Runtime::new().unwrap();
 
-    let result = rt.block_on(lazy(|| {
-        let (tx0, rx0) = oneshot::channel::<()>();
-        let (tx1, rx1) = oneshot::channel::<()>();
-        let task0 = rwlock.read()
-            .and_then(move |guard| {
-                rx0.map(move |_| { *guard }).map_err(|_| ())
-            });
-        let task1 = rwlock.write().map(|mut guard| *guard += 1);
-        let task2 = rwlock.read().map(|guard| *guard);
-        // Readying task3 before task1 and task2 causes Tokio to poll the latter
-        // even though they're not ready
-        let task3 = rx1.map_err(|_| ()).map(|_| tx0.send(()).unwrap());
-        let task4 = lazy(move || {
-            tx1.send(()).unwrap();
-            future::ok::<(), ()>(())
-        });
-        task0.join5(task1, task2, task3, task4)
-    }));
+    rt.block_on(lazy(|| {
+        let mut fut0 = rwlock.read();
+        let guard0 = fut0.poll();       // fut0 immediately gets ownership
+        assert!(guard0.as_ref().unwrap().is_ready());
 
-    assert_eq!(result, Ok((42, (), 42, (), ())));
-    assert_eq!(rwlock.try_unwrap().expect("try_unwrap"), 43);
+        let mut fut1 = rwlock.write();
+        assert!(!fut1.poll().unwrap().is_ready());  // fut1 is blocked
+
+        drop(guard0);                   // Ownership transfers to fut1
+        let guard1 = fut1.poll();
+        assert!(guard1.as_ref().unwrap().is_ready());
+        future::ok::<(), ()>(())
+    })).unwrap();
+}
+
+// Attempt to acquire an rwlock exclusively when it already has a writer.
+#[test]
+fn write_contested() {
+    let rwlock = RwLock::<u32>::new(42);
+    let mut rt = current_thread::Runtime::new().unwrap();
+
+    rt.block_on(lazy(|| {
+        let mut fut0 = rwlock.write();
+        let guard0 = fut0.poll();       // fut0 immediately gets ownership
+        assert!(guard0.as_ref().unwrap().is_ready());
+
+        let mut fut1 = rwlock.write();
+        assert!(!fut1.poll().unwrap().is_ready());  // fut1 is blocked
+
+        drop(guard0);                   // Ownership transfers to fut1
+        let guard1 = fut1.poll();
+        assert!(guard1.as_ref().unwrap().is_ready());
+        future::ok::<(), ()>(())
+    })).unwrap();
 }
 
 #[test]
@@ -227,36 +215,6 @@ fn write_uncontested() {
         })
     })).unwrap();
     assert_eq!(rwlock.try_unwrap().expect("try_unwrap"), 5);
-}
-
-// Pend on an RwLock held exclusively by another task in the same tokio Reactor.
-// poll returns Async::NotReady.  Later, it gets woken up without involving the
-// OS.
-#[test]
-fn write_contested() {
-    let rwlock = RwLock::<u32>::new(0);
-    let mut rt = current_thread::Runtime::new().unwrap();
-
-    let result = rt.block_on(lazy(|| {
-        let (tx0, rx0) = oneshot::channel::<()>();
-        let (tx1, rx1) = oneshot::channel::<()>();
-        let task0 = rwlock.write()
-            .and_then(move |mut guard| {
-                *guard += 5;
-                rx0.map_err(|_| {drop(guard);})
-            });
-        let task1 = rwlock.write().map(|guard| *guard);
-        // Readying task2 before task1 causes Tokio to poll the latter
-        // even though it's not ready
-        let task2 = rx1.map_err(|_| ()).map(|_| tx0.send(()).unwrap());
-        let task3 = lazy(move || {
-            tx1.send(()).unwrap();
-            future::ok::<(), ()>(())
-        });
-        task0.join4(task1, task2, task3)
-    }));
-
-    assert_eq!(result, Ok(((), 5, (), ())));
 }
 
 // RwLocks should be acquired in the order that their Futures are waited upon.
