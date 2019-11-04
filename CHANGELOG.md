@@ -7,6 +7,10 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ### Added
 - Derived `Default` for `Mutex` and `RwLock`
   ([#22](https://github.com/asomers/futures-locks/pull/22))
+
+### Fixed
+- Fixed panics after an unready Future gets dropped
+  ([#24](https://github.com/asomers/futures-locks/pull/24))
   
 ## [0.4.0] - 2019-08-24
 ### Added
