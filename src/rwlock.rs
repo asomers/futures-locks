@@ -1,14 +1,15 @@
 // vim: tw=80
 
-use futures::{Async, Future, Poll};
+use futures::{Async, Future, Poll, sync::oneshot};
 #[cfg(feature = "tokio")] use futures::future;
 #[cfg(feature = "tokio")] use futures::future::IntoFuture;
-use futures::sync::oneshot;
-use std::cell::UnsafeCell;
-use std::clone::Clone;
-use std::collections::VecDeque;
-use std::ops::{Deref, DerefMut};
-use std::sync;
+use std::{
+    cell::UnsafeCell,
+    clone::Clone,
+    collections::VecDeque,
+    ops::{Deref, DerefMut},
+    sync,
+};
 use super::FutState;
 #[cfg(feature = "tokio")] use tokio_executor::{self, Executor, SpawnError};
 #[cfg(feature = "tokio")] use tokio_current_thread as current_thread;
@@ -319,7 +320,6 @@ impl<T: ?Sized> RwLock<T> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate futures_locks;
     /// # use futures_locks::*;
     /// # fn main() {
     /// let mut lock = RwLock::<u32>::new(0);
@@ -347,8 +347,6 @@ impl<T: ?Sized> RwLock<T> {
     ///
     /// # Examples
     /// ```
-    /// # extern crate futures;
-    /// # extern crate futures_locks;
     /// # use futures_locks::*;
     /// # use futures::executor::{Spawn, spawn};
     /// # use futures::Future;
@@ -371,8 +369,6 @@ impl<T: ?Sized> RwLock<T> {
     ///
     /// # Examples
     /// ```
-    /// # extern crate futures;
-    /// # extern crate futures_locks;
     /// # use futures_locks::*;
     /// # use futures::executor::{Spawn, spawn};
     /// # use futures::Future;
@@ -395,7 +391,6 @@ impl<T: ?Sized> RwLock<T> {
     ///
     /// # Examples
     /// ```
-    /// # extern crate futures_locks;
     /// # use futures_locks::*;
     /// # fn main() {
     /// let mut lock = RwLock::<u32>::new(5);
@@ -423,7 +418,6 @@ impl<T: ?Sized> RwLock<T> {
     ///
     /// # Examples
     /// ```
-    /// # extern crate futures_locks;
     /// # use futures_locks::*;
     /// # fn main() {
     /// let mut lock = RwLock::<u32>::new(5);
@@ -501,8 +495,6 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate futures;
-    /// # extern crate futures_locks;
     /// # extern crate tokio_ as tokio;
     /// # use futures_locks::*;
     /// # use futures::{Future, IntoFuture, lazy};
@@ -552,8 +544,6 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate futures;
-    /// # extern crate futures_locks;
     /// # extern crate tokio_ as tokio;
     /// # use futures_locks::*;
     /// # use futures::{Future, IntoFuture, lazy};
@@ -612,8 +602,6 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate futures;
-    /// # extern crate futures_locks;
     /// # extern crate tokio_ as tokio;
     /// # use futures_locks::*;
     /// # use futures::{Future, IntoFuture, lazy};
@@ -665,8 +653,6 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// # Examples
     ///
     /// ```
-    /// # extern crate futures;
-    /// # extern crate futures_locks;
     /// # extern crate tokio_ as tokio;
     /// # use futures_locks::*;
     /// # use futures::{Future, IntoFuture, lazy};
