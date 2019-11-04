@@ -24,7 +24,7 @@ standard library.  But instead of blocking until ready, they return Futures
 which will become ready when the lock is acquired.  See the doc comments for
 individual examples.
 
-`futures-locks` requires Rust 1.31.0 or higher.
+`futures-locks` requires Rust 1.32.0 or higher.
 
 # License
 

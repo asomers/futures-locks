@@ -11,8 +11,6 @@
 //! # Examples
 //!
 //! ```
-//! # extern crate futures;
-//! # extern crate futures_locks;
 //! # use futures_locks::*;
 //! # use futures::executor::{Spawn, spawn};
 //! # use futures::Future;
@@ -28,10 +26,6 @@
 //! [`Tokio`]: https:/tokio.rs
 
 #![cfg_attr(feature = "nightly-docs", feature(doc_cfg))]
-
-extern crate futures;
-#[cfg(feature = "tokio")] extern crate tokio_current_thread;
-#[cfg(feature = "tokio")] extern crate tokio_executor;
 
 mod mutex;
 mod rwlock;
