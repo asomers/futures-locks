@@ -25,13 +25,19 @@ features = ["tokio", "nightly-docs"]
 default = ["tokio"]
 # For building documentation only; no functional change to the library.
 nightly-docs = []
+# Enable methods that require a Tokio executor.
+tokio = ["tokio-executor", "tokio_"]
 
 [dependencies]
 futures-preview = "=0.3.0-alpha.18"
-tokio = { version = "0.2.0-alpha.5", optional = true }
+tokio-executor = { version = "0.2.0-alpha.5", optional = true, features = ["current-thread"] }
+tokio_ = { version = "0.2.0-alpha.5", optional = true, package = "tokio" }
 
 [dev-dependencies]
-tokio = { version = "0.2.0-alpha.5" }
+# features, dependencies, dev-dependencies, and build-dependencies all share
+# the same namespace. To avoid a clash with the `tokio` feature, rename the
+# `tokio` dev-dependency. See https://github.com/rust-lang/cargo/issues/4866.
+tokio_ = { version = "0.2.0-alpha.5", package = "tokio" }
 tokio-test = { version = "0.2.0-alpha.5" }
 
 [[test]]
