@@ -35,11 +35,10 @@ pub use rwlock::{RwLock, RwLockReadFut, RwLockWriteFut,
                  RwLockReadGuard, RwLockWriteGuard};
 
 use futures::channel::oneshot;
-use std::pin::Pin;
 
 /// Poll state of all Futures in this crate.
 enum FutState {
     New,
-    Pending(Pin<Box<oneshot::Receiver<()>>>),
+    Pending(oneshot::Receiver<()>),
     Acquired
 }

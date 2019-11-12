@@ -15,8 +15,7 @@ use std::{
 };
 use super::FutState;
 #[cfg(feature = "tokio")] use futures::FutureExt;
-#[cfg(feature = "tokio")] use tokio;
-#[cfg(feature = "tokio")] use tokio::runtime::current_thread;
+#[cfg(feature = "tokio")] use tokio_::runtime::current_thread;
 
 /// An RAII mutex guard, much like `std::sync::MutexGuard`.  The wrapped data
 /// can be accessed via its `Deref` and `DerefMut` implementations.
@@ -97,13 +96,12 @@ impl<T: ?Sized> Future for MutexFut<T> {
                 let mut mtx_data = self.mutex.inner.mutex.lock()
                     .expect("sync::Mutex::lock");
                 if mtx_data.owned {
-                    let (tx, rx) = oneshot::channel::<()>();
-                    let mut rx_pinned = Box::pin(rx);
+                    let (tx, mut rx) = oneshot::channel::<()>();
                     mtx_data.waiters.push_back(tx);
                     // Even though we know it isn't ready, we need to poll the
                     // receiver in order to register our task for notification.
-                    assert!(!Future::poll(rx_pinned.as_mut(), cx).is_ready());
-                    (Poll::Pending, FutState::Pending(rx_pinned))
+                    assert!(Pin::new(&mut rx).poll(cx).is_pending());
+                    (Poll::Pending, FutState::Pending(rx))
                 } else {
                     mtx_data.owned = true;
                     let guard = MutexGuard{mutex: self.mutex.clone()};
@@ -111,7 +109,7 @@ impl<T: ?Sized> Future for MutexFut<T> {
                 }
             },
             &mut FutState::Pending(ref mut rx) => {
-                match Future::poll(rx.as_mut(), cx) {
+                match Pin::new(rx).poll(cx) {
                     Poll::Pending => return Poll::Pending,
                     Poll::Ready(_) => {
                         let state = FutState::Acquired;
@@ -355,7 +353,7 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// ```
     /// # use futures_locks::*;
     /// # use futures::{Future, future::ready};
-    /// # use tokio::runtime::current_thread::Runtime;
+    /// # use tokio_::runtime::current_thread::Runtime;
     /// # fn main() {
     /// let mtx = Mutex::<u32>::new(0);
     /// let mut rt = Runtime::new().unwrap();
@@ -378,7 +376,7 @@ impl<T: 'static + ?Sized> Mutex<T> {
               T: Send
     {
         let (tx, rx) = oneshot::channel::<R>();
-        tokio::spawn(self.lock()
+        tokio_::spawn(self.lock()
             .then(move |data| {
                 f(data)
                 .map(move |result| {
@@ -402,7 +400,7 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// # use futures_locks::*;
     /// # use futures::{Future, future::ready};
     /// # use std::rc::Rc;
-    /// # use tokio::runtime::current_thread;
+    /// # use tokio_::runtime::current_thread;
     /// # fn main() {
     /// // Note: Rc is not `Send`
     /// let mtx = Mutex::<Rc<u32>>::new(Rc::new(0));
@@ -421,11 +419,11 @@ impl<T: 'static + ?Sized> Mutex<T> {
     pub fn with_local<B, F, R>(&self, f: F)
         -> impl Future<Output = R>
         where F: FnOnce(MutexGuard<T>) -> B + 'static,
-              B: Future<Output = R> + 'static,
+              B: Future<Output = R> + 'static + Unpin,
               R: 'static
     {
         let (tx, rx) = oneshot::channel::<R>();
-        current_thread::TaskExecutor::current().spawn_local(Box::pin(
+        current_thread::spawn(
             self.lock()
             .then(move |data| {
                 f(data)
@@ -435,7 +433,7 @@ impl<T: 'static + ?Sized> Mutex<T> {
                    let _ = tx.send(result);
                })
             })
-        )).unwrap();
+        );
         // We control the sender so we're sure it won't be dropped before
         // sending so we can unwrap safely
         rx.map(Result::unwrap)
