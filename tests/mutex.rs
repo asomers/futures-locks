@@ -135,7 +135,7 @@ fn lock_contested() {
     assert_ready!(fut1.poll());
 }
 
-//// A single Mutex is contested by tasks in multiple threads
+// A single Mutex is contested by tasks in multiple threads
 #[tokio::test]
 async fn lock_multithreaded() {
     let mutex = Mutex::<u32>::new(0);
