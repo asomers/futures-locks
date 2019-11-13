@@ -1,15 +1,16 @@
 //vim: tw=80
 
 use futures::{FutureExt, stream};
-use futures::future::join4;
 #[cfg(feature = "tokio")]
 use futures::future::ready;
 use futures::stream::StreamExt;
+use std::sync::Arc;
 #[cfg(feature = "tokio")]
 use std::rc::Rc;
-use tokio;
+use tokio::{self, sync::Barrier};
+use tokio::runtime;
 #[cfg(feature = "tokio")]
-use tokio::runtime::{self, current_thread};
+use tokio::runtime::current_thread;
 use tokio_test::task::spawn;
 use tokio_test::{assert_pending, assert_ready};
 use futures_locks::*;
@@ -143,21 +144,39 @@ async fn lock_multithreaded() {
     let mtx_clone1 = mutex.clone();
     let mtx_clone2 = mutex.clone();
     let mtx_clone3 = mutex.clone();
+    let barrier = Arc::new(Barrier::new(5));
+    let b0 = barrier.clone();
+    let b1 = barrier.clone();
+    let b2 = barrier.clone();
+    let b3 = barrier.clone();
+    let rt = runtime::Runtime::new().unwrap();
 
-    let task0 = stream::iter(0..1000).for_each(move |_| {
-        mtx_clone0.lock().map(|mut guard| { *guard += 2 })
+    rt.spawn(async move {
+        stream::iter(0..1000).for_each(move |_| {
+            mtx_clone0.lock().map(|mut guard| { *guard += 2 })
+        }).await;
+        b0.wait().await;
     });
-    let task1 = stream::iter(0..1000).for_each(move |_| {
-        mtx_clone1.lock().map(|mut guard| { *guard += 3 })
+    rt.spawn(async move {
+        stream::iter(0..1000).for_each(move |_| {
+            mtx_clone1.lock().map(|mut guard| { *guard += 3 })
+        }).await;
+        b1.wait().await;
     });
-    let task2 = stream::iter(0..1000).for_each(move |_| {
-        mtx_clone2.lock().map(|mut guard| { *guard += 5 })
+    rt.spawn(async move {
+        stream::iter(0..1000).for_each(move |_| {
+            mtx_clone2.lock().map(|mut guard| { *guard += 5 })
+        }).await;
+        b2.wait().await;
     });
-    let task3 = stream::iter(0..1000).for_each(move |_| {
-        mtx_clone3.lock().map(|mut guard| { *guard += 7 })
+    rt.spawn(async move {
+        stream::iter(0..1000).for_each(move |_| {
+            mtx_clone3.lock().map(|mut guard| { *guard += 7 })
+        }).await;
+        b3.wait().await;
     });
 
-    join4(task0, task1, task2, task3).await;
+    barrier.wait().await;
     assert_eq!(mutex.try_unwrap().expect("try_unwrap"), 17_000);
 }
 

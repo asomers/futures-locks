@@ -3,16 +3,17 @@
 use futures::{
     FutureExt,
     StreamExt,
-    future::join4,
     stream
 };
 #[cfg(feature = "tokio")]
 use futures::future::ready;
+use std::sync::Arc;
 #[cfg(feature = "tokio")]
 use std::rc::Rc;
-use tokio;
+use tokio::{self, sync::Barrier};
+use tokio::runtime;
 #[cfg(feature = "tokio")]
-use tokio::runtime::{self, current_thread};
+use tokio::runtime::current_thread;
 use tokio_test::{
     assert_pending,
     assert_ready,
@@ -265,29 +266,51 @@ async fn multithreaded() {
     let rwlock_clone1 = rwlock.clone();
     let rwlock_clone2 = rwlock.clone();
     let rwlock_clone3 = rwlock.clone();
+    let barrier = Arc::new(Barrier::new(5));
+    let b0 = barrier.clone();
+    let b1 = barrier.clone();
+    let b2 = barrier.clone();
+    let b3 = barrier.clone();
+    let rt = runtime::Runtime::new().unwrap();
 
-    let task0 = stream::iter(0..1000).for_each(move |_| {
-        let rwlock_clone4 = rwlock_clone0.clone();
-        rwlock_clone0.write().map(|mut guard| { *guard += 2 })
+    rt.spawn(async move {
+        stream::iter(0..1000).for_each(move |_| {
+            let rwlock_clone4 = rwlock_clone0.clone();
+            rwlock_clone0.write()
+            .map(|mut guard| { *guard += 2 })
             .then(move |_| rwlock_clone4.read().map(|_| ()))
+        }).await;
+        b0.wait().await;
     });
-    let task1 = stream::iter(0..1000).for_each(move |_| {
-        let rwlock_clone5 = rwlock_clone1.clone();
-        rwlock_clone1.write().map(|mut guard| { *guard += 3 })
+    rt.spawn(async move {
+        stream::iter(0..1000).for_each(move |_| {
+            let rwlock_clone5 = rwlock_clone1.clone();
+            rwlock_clone1.write()
+            .map(|mut guard| { *guard += 3 })
             .then(move |_| rwlock_clone5.read().map(|_| ()))
+        }).await;
+        b1.wait().await;
     });
-    let task2 = stream::iter(0..1000).for_each(move |_| {
-        let rwlock_clone6 = rwlock_clone2.clone();
-        rwlock_clone2.write().map(|mut guard| { *guard += 5 })
+    rt.spawn(async move {
+        stream::iter(0..1000).for_each(move |_| {
+            let rwlock_clone6 = rwlock_clone2.clone();
+            rwlock_clone2.write()
+            .map(|mut guard| { *guard += 5 })
             .then(move |_| rwlock_clone6.read().map(|_| ()))
+        }).await;
+        b2.wait().await;
     });
-    let task3 = stream::iter(0..1000).for_each(move |_| {
-        let rwlock_clone7 = rwlock_clone3.clone();
-        rwlock_clone3.write().map(|mut guard| { *guard += 7 })
+    rt.spawn(async move {
+        stream::iter(0..1000).for_each(move |_| {
+            let rwlock_clone7 = rwlock_clone3.clone();
+            rwlock_clone3.write()
+            .map(|mut guard| { *guard += 7 })
             .then(move |_| rwlock_clone7.read().map(|_| ()))
+        }).await;
+        b3.wait().await;
     });
 
-    join4(task0, task1, task2, task3).await;
+    barrier.wait().await;
     assert_eq!(rwlock.try_unwrap().expect("try_unwrap"), 17_000);
 }
 
