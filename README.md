@@ -13,7 +13,7 @@ a single task, not the entire reactor.
 ```toml
 # Cargo.toml
 [dependencies]
-futures-preview = "=0.3.0-alpha.18"
+futures = "0.3.1"
 futures-locks = "0.6"
 ```
 
