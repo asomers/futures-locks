@@ -31,8 +31,7 @@ mod mutex;
 mod rwlock;
 
 pub use mutex::{Mutex, MutexFut, MutexGuard, MutexWeak};
-pub use rwlock::{RwLock, RwLockReadFut, RwLockWriteFut,
-                 RwLockReadGuard, RwLockWriteGuard};
+pub use rwlock::{RwLock, RwLockReadFut, RwLockReadGuard, RwLockWriteFut, RwLockWriteGuard};
 
 use futures::sync::oneshot;
 
@@ -40,5 +39,5 @@ use futures::sync::oneshot;
 enum FutState {
     New,
     Pending(oneshot::Receiver<()>),
-    Acquired
+    Acquired,
 }

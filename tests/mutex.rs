@@ -1,13 +1,13 @@
 //vim: tw=80
 
-use futures::{Future, Stream, future, lazy, stream};
+use futures::{future, lazy, stream, Future, Stream};
+use futures_locks::*;
 #[cfg(feature = "tokio")]
 use std::rc::Rc;
 use tokio;
 #[cfg(feature = "tokio")]
 use tokio::runtime;
 use tokio::runtime::current_thread;
-use futures_locks::*;
 
 // Create a MutexWeak and then upgrade it to Mutex
 #[test]
@@ -57,18 +57,19 @@ fn drop_when_ready() {
 
     rt.block_on(lazy(|| {
         let mut fut1 = mutex.lock();
-        let guard1 = fut1.poll();    // fut1 immediately gets ownership
+        let guard1 = fut1.poll(); // fut1 immediately gets ownership
         assert!(guard1.as_ref().unwrap().is_ready());
         let mut fut2 = mutex.lock();
         assert!(!fut2.poll().unwrap().is_ready());
-        drop(guard1);                // ownership transfers to fut2
+        drop(guard1); // ownership transfers to fut2
         drop(fut1);
-        drop(fut2);                  // relinquish ownership
+        drop(fut2); // relinquish ownership
         let mut fut3 = mutex.lock();
-        let guard3 = fut3.poll();    // fut3 immediately gets ownership
+        let guard3 = fut3.poll(); // fut3 immediately gets ownership
         assert!(guard3.as_ref().unwrap().is_ready());
         future::ok::<(), ()>(())
-    })).unwrap();
+    }))
+    .unwrap();
 }
 
 // When a pending Mutex gets dropped after being polled() but before gaining
@@ -80,19 +81,20 @@ fn drop_before_ready() {
 
     rt.block_on(lazy(|| {
         let mut fut1 = mutex.lock();
-        let guard1 = fut1.poll();    // fut1 immediately gets ownership
+        let guard1 = fut1.poll(); // fut1 immediately gets ownership
         assert!(guard1.as_ref().unwrap().is_ready());
         let mut fut2 = mutex.lock();
         assert!(!fut2.poll().unwrap().is_ready());
         let mut fut3 = mutex.lock();
         assert!(!fut3.poll().unwrap().is_ready());
-        drop(fut2);                  // drop before gaining ownership
-        drop(guard1);                // ownership transfers to fut3
+        drop(fut2); // drop before gaining ownership
+        drop(guard1); // ownership transfers to fut3
         drop(fut1);
         let guard3 = fut3.poll();
         assert!(guard3.as_ref().unwrap().is_ready());
         future::ok::<(), ()>(())
-    })).unwrap();
+    }))
+    .unwrap();
 }
 
 // Mutably dereference a uniquely owned Mutex
@@ -117,11 +119,9 @@ fn lock_uncontested() {
     let mutex = Mutex::<u32>::new(0);
     let mut rt = current_thread::Runtime::new().unwrap();
 
-    let result = rt.block_on(lazy(|| {
-        mutex.lock().map(|guard| {
-            *guard + 5
-        })
-    })).unwrap();
+    let result = rt
+        .block_on(lazy(|| mutex.lock().map(|guard| *guard + 5)))
+        .unwrap();
     assert_eq!(result, 5);
 }
 
@@ -134,17 +134,18 @@ fn lock_contested() {
 
     rt.block_on(lazy(|| {
         let mut fut0 = mutex.lock();
-        let guard0 = fut0.poll();    // fut0 immediately gets ownership
+        let guard0 = fut0.poll(); // fut0 immediately gets ownership
         assert!(guard0.as_ref().unwrap().is_ready());
 
         let mut fut1 = mutex.lock();
-        assert!(!fut1.poll().unwrap().is_ready());  // fut1 is blocked
+        assert!(!fut1.poll().unwrap().is_ready()); // fut1 is blocked
 
-        drop(guard0);               // Ownership transfers to fut1
+        drop(guard0); // Ownership transfers to fut1
         let guard1 = fut1.poll();
         assert!(guard1.as_ref().unwrap().is_ready());
         future::ok::<(), ()>(())
-    })).unwrap();
+    }))
+    .unwrap();
 }
 
 // A single Mutex is contested by tasks in multiple threads
@@ -157,18 +158,22 @@ fn lock_multithreaded() {
     let mtx_clone3 = mutex.clone();
 
     let parent = lazy(move || {
-        tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
-            mtx_clone0.lock().map(|mut guard| { *guard += 2 })
-        }));
-        tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
-            mtx_clone1.lock().map(|mut guard| { *guard += 3 })
-        }));
-        tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
-            mtx_clone2.lock().map(|mut guard| { *guard += 5 })
-        }));
-        tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
-            mtx_clone3.lock().map(|mut guard| { *guard += 7 })
-        }));
+        tokio::spawn(
+            stream::iter_ok::<_, ()>(0..1000)
+                .for_each(move |_| mtx_clone0.lock().map(|mut guard| *guard += 2)),
+        );
+        tokio::spawn(
+            stream::iter_ok::<_, ()>(0..1000)
+                .for_each(move |_| mtx_clone1.lock().map(|mut guard| *guard += 3)),
+        );
+        tokio::spawn(
+            stream::iter_ok::<_, ()>(0..1000)
+                .for_each(move |_| mtx_clone2.lock().map(|mut guard| *guard += 5)),
+        );
+        tokio::spawn(
+            stream::iter_ok::<_, ()>(0..1000)
+                .for_each(move |_| mtx_clone3.lock().map(|mut guard| *guard += 7)),
+        );
         future::ok::<(), ()>(())
     });
 
@@ -184,9 +189,7 @@ fn lock_order() {
     let fut1 = mutex.lock().map(|mut guard| guard.push(1));
     let mut rt = current_thread::Runtime::new().unwrap();
 
-    let r = rt.block_on(lazy(|| {
-        fut1.and_then(|_| fut2)
-    }));
+    let r = rt.block_on(lazy(|| fut1.and_then(|_| fut2)));
     assert!(r.is_ok());
     assert_eq!(mutex.try_unwrap().unwrap(), vec![1, 2]);
 }
@@ -228,7 +231,8 @@ fn with_err() {
             } else {
                 Err("Whoops!")
             }
-        }).unwrap()
+        })
+        .unwrap()
     }));
     assert_eq!(r, Err("Whoops!"));
 }
@@ -239,9 +243,7 @@ fn with_ok() {
     let mtx = Mutex::<i32>::new(5);
     let mut rt = current_thread::Runtime::new().unwrap();
     let r = rt.block_on(lazy(move || {
-        mtx.with(|guard| {
-            Ok(*guard) as Result<i32, ()>
-        }).unwrap()
+        mtx.with(|guard| Ok(*guard) as Result<i32, ()>).unwrap()
     }));
     assert_eq!(r, Ok(5));
 }
@@ -255,9 +257,7 @@ fn with_threadpool() {
     let mtx = Mutex::<i32>::new(5);
     let mut rt = runtime::Runtime::new().unwrap();
     let r = rt.block_on(lazy(move || {
-        mtx.with(|guard| {
-            Ok(*guard) as Result<i32, ()>
-        }).unwrap()
+        mtx.with(|guard| Ok(*guard) as Result<i32, ()>).unwrap()
     }));
     assert_eq!(r, Ok(5));
 }
@@ -269,9 +269,8 @@ fn with_local_ok() {
     let mtx = Mutex::<Rc<i32>>::new(Rc::new(5));
     let mut rt = current_thread::Runtime::new().unwrap();
     let r = rt.block_on(lazy(move || {
-        mtx.with_local(|guard| {
-            Ok(**guard) as Result<i32, ()>
-        }).unwrap()
+        mtx.with_local(|guard| Ok(**guard) as Result<i32, ()>)
+            .unwrap()
     }));
     assert_eq!(r, Ok(5));
 }

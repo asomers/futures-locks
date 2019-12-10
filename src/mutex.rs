@@ -1,23 +1,27 @@
 // vim: tw=80
 
-use futures::{Async, Future, Poll, sync::oneshot};
-#[cfg(feature = "tokio")] use futures::future;
-#[cfg(feature = "tokio")] use futures::future::IntoFuture;
+use super::FutState;
+#[cfg(feature = "tokio")]
+use futures::future;
+#[cfg(feature = "tokio")]
+use futures::future::IntoFuture;
+use futures::{sync::oneshot, Async, Future, Poll};
 use std::{
     cell::UnsafeCell,
     clone::Clone,
     collections::VecDeque,
     ops::{Deref, DerefMut},
-    sync
+    sync,
 };
-use super::FutState;
-#[cfg(feature = "tokio")] use tokio_executor::{self, Executor, SpawnError};
-#[cfg(feature = "tokio")] use tokio_current_thread as current_thread;
+#[cfg(feature = "tokio")]
+use tokio_current_thread as current_thread;
+#[cfg(feature = "tokio")]
+use tokio_executor::{self, Executor, SpawnError};
 
 /// An RAII mutex guard, much like `std::sync::MutexGuard`.  The wrapped data
 /// can be accessed via its `Deref` and `DerefMut` implementations.
 pub struct MutexGuard<T: ?Sized> {
-    mutex: Mutex<T>
+    mutex: Mutex<T>,
 }
 
 impl<T: ?Sized> Drop for MutexGuard<T> {
@@ -30,13 +34,13 @@ impl<T: ?Sized> Deref for MutexGuard<T> {
     type Target = T;
 
     fn deref(&self) -> &T {
-        unsafe {&*self.mutex.inner.data.get()}
+        unsafe { &*self.mutex.inner.data.get() }
     }
 }
 
 impl<T: ?Sized> DerefMut for MutexGuard<T> {
     fn deref_mut(&mut self) -> &mut T {
-        unsafe {&mut *self.mutex.inner.data.get()}
+        unsafe { &mut *self.mutex.inner.data.get() }
     }
 }
 
@@ -48,7 +52,7 @@ pub struct MutexFut<T: ?Sized> {
 
 impl<T: ?Sized> MutexFut<T> {
     fn new(state: FutState, mutex: Mutex<T>) -> Self {
-        MutexFut{state, mutex}
+        MutexFut { state, mutex }
     }
 }
 
@@ -57,7 +61,7 @@ impl<T: ?Sized> Drop for MutexFut<T> {
         match &mut self.state {
             &mut FutState::New => {
                 // Mutex hasn't yet been modified; nothing to do
-            },
+            }
             &mut FutState::Pending(ref mut rx) => {
                 rx.close();
                 match rx.try_recv() {
@@ -66,16 +70,16 @@ impl<T: ?Sized> Drop for MutexFut<T> {
                         // dropped before it was ever polled.  Release the
                         // mutex.
                         self.mutex.unlock()
-                    },
+                    }
                     Ok(None) => {
                         // Dropping the Future before it acquires the Mutex is
                         // equivalent to cancelling it.
-                    },
+                    }
                     Err(oneshot::Canceled) => {
                         // Never received ownership of the mutex
                     }
                 }
-            },
+            }
             &mut FutState::Acquired => {
                 // The MutexGuard will take care of releasing the Mutex
             }
@@ -90,8 +94,7 @@ impl<T: ?Sized> Future for MutexFut<T> {
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         let (result, new_state) = match &mut self.state {
             &mut FutState::New => {
-                let mut mtx_data = self.mutex.inner.mutex.lock()
-                    .expect("sync::Mutex::lock");
+                let mut mtx_data = self.mutex.inner.mutex.lock().expect("sync::Mutex::lock");
                 if mtx_data.owned {
                     let (tx, mut rx) = oneshot::channel::<()>();
                     mtx_data.waiters.push_back(tx);
@@ -101,10 +104,12 @@ impl<T: ?Sized> Future for MutexFut<T> {
                     (Ok(Async::NotReady), FutState::Pending(rx))
                 } else {
                     mtx_data.owned = true;
-                    let guard = MutexGuard{mutex: self.mutex.clone()};
+                    let guard = MutexGuard {
+                        mutex: self.mutex.clone(),
+                    };
                     (Ok(Async::Ready(guard)), FutState::Acquired)
                 }
-            },
+            }
             &mut FutState::Pending(ref mut rx) => {
                 match rx.poll() {
                     Ok(Async::NotReady) => return Ok(Async::NotReady),
@@ -115,13 +120,14 @@ impl<T: ?Sized> Future for MutexFut<T> {
                     Err(_) => unreachable!(),
                     Ok(Async::Ready(_)) => {
                         let state = FutState::Acquired;
-                        let result = Ok(Async::Ready(
-                                MutexGuard{mutex: self.mutex.clone()}));
+                        let result = Ok(Async::Ready(MutexGuard {
+                            mutex: self.mutex.clone(),
+                        }));
                         (result, state)
-                    }  //LCOV_EXCL_LINE    kcov false negative
+                    } //LCOV_EXCL_LINE    kcov false negative
                 }
-            },
-            &mut FutState::Acquired => panic!("Double-poll of ready Future")
+            }
+            &mut FutState::Acquired => panic!("Double-poll of ready Future"),
         };
         self.state = new_state;
         result
@@ -141,9 +147,9 @@ struct Inner<T: ?Sized> {
     data: UnsafeCell<T>,
 }
 
-/// `MutexWeak` is a non-owning reference to a [`Mutex`].  `MutexWeak` is to 
+/// `MutexWeak` is a non-owning reference to a [`Mutex`].  `MutexWeak` is to
 /// [`Mutex`] as [`std::sync::Weak`] is to [`std::sync::Arc`].
-/// 
+///
 /// # Examples
 /// ```
 /// # use futures_locks::{Mutex,MutexGuard};
@@ -163,11 +169,11 @@ pub struct MutexWeak<T: ?Sized> {
 }
 
 impl<T: ?Sized> MutexWeak<T> {
-    /// Tries to upgrade the `MutexWeak` to `Mutex`. If the `Mutex` was dropped 
+    /// Tries to upgrade the `MutexWeak` to `Mutex`. If the `Mutex` was dropped
     /// then the function return `None`.
     pub fn upgrade(&self) -> Option<Mutex<T>> {
         if let Some(inner) = self.inner.upgrade() {
-            return Some(Mutex{inner})
+            return Some(Mutex { inner });
         }
         None
     }
@@ -175,7 +181,9 @@ impl<T: ?Sized> MutexWeak<T> {
 
 impl<T: ?Sized> Clone for MutexWeak<T> {
     fn clone(&self) -> MutexWeak<T> {
-        MutexWeak {inner: self.inner.clone()}
+        MutexWeak {
+            inner: self.inner.clone(),
+        }
     }
 }
 
@@ -211,7 +219,9 @@ pub struct Mutex<T: ?Sized> {
 
 impl<T: ?Sized> Clone for Mutex<T> {
     fn clone(&self) -> Mutex<T> {
-        Mutex { inner: self.inner.clone()}
+        Mutex {
+            inner: self.inner.clone(),
+        }
     }
 }
 
@@ -224,9 +234,11 @@ impl<T> Mutex<T> {
         };
         let inner = Inner {
             mutex: sync::Mutex::new(mutex_data),
-            data: UnsafeCell::new(t)
-        };  //LCOV_EXCL_LINE    kcov false negative
-        Mutex { inner: sync::Arc::new(inner)}
+            data: UnsafeCell::new(t),
+        }; //LCOV_EXCL_LINE    kcov false negative
+        Mutex {
+            inner: sync::Arc::new(inner),
+        }
     }
 
     /// Consumes the `Mutex` and returns the wrapped data.  If the `Mutex` still
@@ -238,9 +250,11 @@ impl<T> Mutex<T> {
                 // `unsafe` is no longer needed as of somewhere around 1.25.0.
                 // https://github.com/rust-lang/rust/issues/35067
                 #[allow(unused_unsafe)]
-                unsafe { inner.data.into_inner() }
+                unsafe {
+                    inner.data.into_inner()
+                }
             }),
-            Err(arc) => Err(Mutex {inner: arc})
+            Err(arc) => Err(Mutex { inner: arc }),
         }
     }
 }
@@ -250,7 +264,9 @@ impl<T: ?Sized> Mutex<T> {
     ///
     /// [`MutexWeak`]: struct.MutexWeak.html
     pub fn downgrade(this: &Mutex<T>) -> MutexWeak<T> {
-        MutexWeak {inner: sync::Arc::<Inner<T>>::downgrade(&this.inner)}
+        MutexWeak {
+            inner: sync::Arc::<Inner<T>>::downgrade(&this.inner),
+        }
     }
 
     /// Returns a reference to the underlying data, if there are no other
@@ -311,7 +327,9 @@ impl<T: ?Sized> Mutex<T> {
             Err(())
         } else {
             mtx_data.owned = true;
-            Ok(MutexGuard{mutex: self.clone()})
+            Ok(MutexGuard {
+                mutex: self.clone(),
+            })
         }
     }
 
@@ -371,29 +389,29 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// ```
     #[cfg(any(feature = "tokio", all(feature = "nightly-docs", rustdoc)))]
     #[cfg_attr(feature = "nightly-docs", doc(cfg(feature = "tokio")))]
-    pub fn with<F, B, R, E>(&self, f: F)
-        -> Result<impl Future<Item = R, Error = E>, SpawnError>
-        where F: FnOnce(MutexGuard<T>) -> B + Send + 'static,
-              B: IntoFuture<Item = R, Error = E> + 'static,
-              <B as IntoFuture>::Future: Send,
-              R: Send + 'static,
-              E: Send + 'static,
-              T: Send
+    pub fn with<F, B, R, E>(&self, f: F) -> Result<impl Future<Item = R, Error = E>, SpawnError>
+    where
+        F: FnOnce(MutexGuard<T>) -> B + Send + 'static,
+        B: IntoFuture<Item = R, Error = E> + 'static,
+        <B as IntoFuture>::Future: Send,
+        R: Send + 'static,
+        E: Send + 'static,
+        T: Send,
     {
         let (tx, rx) = oneshot::channel::<Result<R, E>>();
-        tokio_executor::DefaultExecutor::current().spawn(Box::new(self.lock()
-            .and_then(move |data| {
-                f(data).into_future()
-                       .then(move |result| {
-                           // Swallow errors; there's nothing to do if the
-                           // receiver got cancelled
-                           let _ = tx.send(result);
-                           future::ok::<(), ()>(())
-                       })
-            })
-            // We control the sender so we're sure it won't be dropped before
-            // sending so we can unwrap safely
-        )).map(|_| rx.then(Result::unwrap))
+        tokio_executor::DefaultExecutor::current()
+            .spawn(Box::new(
+                self.lock().and_then(move |data| {
+                    f(data).into_future().then(move |result| {
+                        // Swallow errors; there's nothing to do if the
+                        // receiver got cancelled
+                        let _ = tx.send(result);
+                        future::ok::<(), ()>(())
+                    })
+                }), // We control the sender so we're sure it won't be dropped before
+                    // sending so we can unwrap safely
+            ))
+            .map(|_| rx.then(Result::unwrap))
     }
 
     /// Like [`with`](#method.with) but for Futures that aren't `Send`.
@@ -423,28 +441,30 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// ```
     #[cfg(any(feature = "tokio", all(feature = "nightly-docs", rustdoc)))]
     #[cfg_attr(feature = "nightly-docs", doc(cfg(feature = "tokio")))]
-    pub fn with_local<F, B, R, E>(&self, f: F)
-        -> Result<impl Future<Item = R, Error = E>, SpawnError>
-        where F: FnOnce(MutexGuard<T>) -> B + 'static,
-              B: IntoFuture<Item = R, Error = E> + 'static,
-              R: 'static,
-              E: 'static
+    pub fn with_local<F, B, R, E>(
+        &self,
+        f: F,
+    ) -> Result<impl Future<Item = R, Error = E>, SpawnError>
+    where
+        F: FnOnce(MutexGuard<T>) -> B + 'static,
+        B: IntoFuture<Item = R, Error = E> + 'static,
+        R: 'static,
+        E: 'static,
     {
         let (tx, rx) = oneshot::channel::<Result<R, E>>();
-        current_thread::TaskExecutor::current().spawn_local(Box::new(
-            self.lock()
-            .and_then(move |data| {
-                f(data).into_future()
-                       .then(move |result| {
-                           // Swallow errors; there's nothing to do if the
-                           // receiver got cancelled
-                           let _ = tx.send(result);
-                           future::ok::<(), ()>(())
-                       })
-            })
-            // We control the sender so we're sure it won't be dropped before
-            // sending so we can unwrap safely
-        )).map(|_| rx.then(Result::unwrap))
+        current_thread::TaskExecutor::current()
+            .spawn_local(Box::new(
+                self.lock().and_then(move |data| {
+                    f(data).into_future().then(move |result| {
+                        // Swallow errors; there's nothing to do if the
+                        // receiver got cancelled
+                        let _ = tx.send(result);
+                        future::ok::<(), ()>(())
+                    })
+                }), // We control the sender so we're sure it won't be dropped before
+                    // sending so we can unwrap safely
+            ))
+            .map(|_| rx.then(Result::unwrap))
     }
 }
 

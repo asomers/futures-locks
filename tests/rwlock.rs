@@ -1,14 +1,13 @@
 //vim: tw=80
 
-use futures::{Future, Stream, future, lazy, stream};
+use futures::{future, lazy, stream, Future, Stream};
+use futures_locks::*;
 #[cfg(feature = "tokio")]
 use std::rc::Rc;
 use tokio;
 #[cfg(feature = "tokio")]
 use tokio::runtime;
 use tokio::runtime::current_thread;
-use futures_locks::*;
-
 
 // When an exclusively owned RwLock future is dropped after gaining ownership
 // but before begin polled, it should relinquish ownership.  If not, deadlocks
@@ -20,17 +19,18 @@ fn drop_exclusive_before_poll_returns_ready() {
 
     rt.block_on(lazy(|| {
         let mut fut1 = rwlock.read();
-        let guard1 = fut1.poll();       // fut1 immediately gets ownership
+        let guard1 = fut1.poll(); // fut1 immediately gets ownership
         assert!(guard1.as_ref().unwrap().is_ready());
         let mut fut2 = rwlock.write();
         assert!(!fut2.poll().unwrap().is_ready());
-        drop(guard1);                   // ownership transfers to fut2
-        drop(fut2);                     // relinquish ownership
+        drop(guard1); // ownership transfers to fut2
+        drop(fut2); // relinquish ownership
         let mut fut3 = rwlock.read();
-        let guard3 = fut3.poll();       // fut3 immediately gets ownership
+        let guard3 = fut3.poll(); // fut3 immediately gets ownership
         assert!(guard3.as_ref().unwrap().is_ready());
         future::ok::<(), ()>(())
-    })).unwrap();
+    }))
+    .unwrap();
 }
 
 // When a pending exclusive RwLock gets dropped after being polled() but before
@@ -42,19 +42,20 @@ fn drop_exclusive_before_ready() {
 
     rt.block_on(lazy(|| {
         let mut fut1 = rwlock.read();
-        let guard1 = fut1.poll();    // fut1 immediately gets ownership
+        let guard1 = fut1.poll(); // fut1 immediately gets ownership
         assert!(guard1.as_ref().unwrap().is_ready());
         let mut fut2 = rwlock.write();
         assert!(!fut2.poll().unwrap().is_ready());
         let mut fut3 = rwlock.write();
         assert!(!fut3.poll().unwrap().is_ready());
-        drop(fut2);                  // drop before gaining ownership
-        drop(guard1);                // ownership transfers to fut3
+        drop(fut2); // drop before gaining ownership
+        drop(guard1); // ownership transfers to fut3
         drop(fut1);
         let guard3 = fut3.poll();
         assert!(guard3.as_ref().unwrap().is_ready());
         future::ok::<(), ()>(())
-    })).unwrap();
+    }))
+    .unwrap();
 }
 
 // Like drop_exclusive_before_ready, but the rwlock is already locked in
@@ -66,19 +67,20 @@ fn drop_exclusive_before_ready_2() {
 
     rt.block_on(lazy(|| {
         let mut fut1 = rwlock.write();
-        let guard1 = fut1.poll();    // fut1 immediately gets ownership
+        let guard1 = fut1.poll(); // fut1 immediately gets ownership
         assert!(guard1.as_ref().unwrap().is_ready());
         let mut fut2 = rwlock.write();
         assert!(!fut2.poll().unwrap().is_ready());
         let mut fut3 = rwlock.write();
         assert!(!fut3.poll().unwrap().is_ready());
-        drop(fut2);                  // drop before gaining ownership
-        drop(guard1);                // ownership transfers to fut3
+        drop(fut2); // drop before gaining ownership
+        drop(guard1); // ownership transfers to fut3
         drop(fut1);
         let guard3 = fut3.poll();
         assert!(guard3.as_ref().unwrap().is_ready());
         future::ok::<(), ()>(())
-    })).unwrap();
+    }))
+    .unwrap();
 }
 
 // When a nonexclusively owned RwLock future is dropped after gaining ownership
@@ -91,17 +93,18 @@ fn drop_shared_before_poll_returns_ready() {
 
     rt.block_on(lazy(|| {
         let mut fut1 = rwlock.write();
-        let guard1 = fut1.poll();       // fut1 immediately gets ownership
+        let guard1 = fut1.poll(); // fut1 immediately gets ownership
         assert!(guard1.as_ref().unwrap().is_ready());
         let mut fut2 = rwlock.read();
         assert!(!fut2.poll().unwrap().is_ready());
-        drop(guard1);                   // ownership transfers to fut2
-        drop(fut2);                     // relinquish ownership
+        drop(guard1); // ownership transfers to fut2
+        drop(fut2); // relinquish ownership
         let mut fut3 = rwlock.write();
-        let guard3 = fut3.poll();       // fut3 immediately gets ownership
+        let guard3 = fut3.poll(); // fut3 immediately gets ownership
         assert!(guard3.as_ref().unwrap().is_ready());
         future::ok::<(), ()>(())
-    })).unwrap();
+    }))
+    .unwrap();
 }
 
 // When a pending shared RwLock gets dropped after being polled() but before
@@ -113,19 +116,20 @@ fn drop_shared_before_ready() {
 
     rt.block_on(lazy(|| {
         let mut fut1 = rwlock.write();
-        let guard1 = fut1.poll();    // fut1 immediately gets ownership
+        let guard1 = fut1.poll(); // fut1 immediately gets ownership
         assert!(guard1.as_ref().unwrap().is_ready());
         let mut fut2 = rwlock.read();
         assert!(!fut2.poll().unwrap().is_ready());
         let mut fut3 = rwlock.read();
         assert!(!fut3.poll().unwrap().is_ready());
-        drop(fut2);                  // drop before gaining ownership
-        drop(guard1);                // ownership transfers to fut3
+        drop(fut2); // drop before gaining ownership
+        drop(guard1); // ownership transfers to fut3
         drop(fut1);
         let guard3 = fut3.poll();
         assert!(guard3.as_ref().unwrap().is_ready());
         future::ok::<(), ()>(())
-    })).unwrap();
+    }))
+    .unwrap();
 }
 
 // Mutably dereference a uniquely owned RwLock
@@ -152,14 +156,15 @@ fn read_shared() {
 
     rt.block_on(lazy(|| {
         let mut fut0 = rwlock.read();
-        let guard0 = fut0.poll();       // fut0 immediately gets ownership
+        let guard0 = fut0.poll(); // fut0 immediately gets ownership
         assert!(guard0.as_ref().unwrap().is_ready());
 
         let mut fut1 = rwlock.read();
-        let guard1 = fut1.poll();       // fut1 also gets ownership
+        let guard1 = fut1.poll(); // fut1 also gets ownership
         assert!(guard1.as_ref().unwrap().is_ready());
         future::ok::<(), ()>(())
-    })).unwrap();
+    }))
+    .unwrap();
 }
 
 // Acquire an RwLock nonexclusively by a single task
@@ -168,11 +173,9 @@ fn read_uncontested() {
     let rwlock = RwLock::<u32>::new(42);
     let mut rt = current_thread::Runtime::new().unwrap();
 
-    let result = rt.block_on(lazy(|| {
-        rwlock.read().map(|guard| {
-            *guard
-        })
-    })).unwrap();
+    let result = rt
+        .block_on(lazy(|| rwlock.read().map(|guard| *guard)))
+        .unwrap();
 
     assert_eq!(result, 42);
 }
@@ -185,17 +188,18 @@ fn write_read_contested() {
 
     rt.block_on(lazy(|| {
         let mut fut0 = rwlock.write();
-        let guard0 = fut0.poll();       // fut0 immediately gets ownership
+        let guard0 = fut0.poll(); // fut0 immediately gets ownership
         assert!(guard0.as_ref().unwrap().is_ready());
 
         let mut fut1 = rwlock.read();
-        assert!(!fut1.poll().unwrap().is_ready());  // fut1 is blocked
+        assert!(!fut1.poll().unwrap().is_ready()); // fut1 is blocked
 
-        drop(guard0);                   // Ownership transfers to fut1
+        drop(guard0); // Ownership transfers to fut1
         let guard1 = fut1.poll();
         assert!(guard1.as_ref().unwrap().is_ready());
         future::ok::<(), ()>(())
-    })).unwrap();
+    }))
+    .unwrap();
 }
 
 // Attempt to acquire an rwlock exclusively when it already has a reader.
@@ -206,17 +210,18 @@ fn read_write_contested() {
 
     rt.block_on(lazy(|| {
         let mut fut0 = rwlock.read();
-        let guard0 = fut0.poll();       // fut0 immediately gets ownership
+        let guard0 = fut0.poll(); // fut0 immediately gets ownership
         assert!(guard0.as_ref().unwrap().is_ready());
 
         let mut fut1 = rwlock.write();
-        assert!(!fut1.poll().unwrap().is_ready());  // fut1 is blocked
+        assert!(!fut1.poll().unwrap().is_ready()); // fut1 is blocked
 
-        drop(guard0);                   // Ownership transfers to fut1
+        drop(guard0); // Ownership transfers to fut1
         let guard1 = fut1.poll();
         assert!(guard1.as_ref().unwrap().is_ready());
         future::ok::<(), ()>(())
-    })).unwrap();
+    }))
+    .unwrap();
 }
 
 // Attempt to acquire an rwlock exclusively when it already has a writer.
@@ -227,17 +232,18 @@ fn write_contested() {
 
     rt.block_on(lazy(|| {
         let mut fut0 = rwlock.write();
-        let guard0 = fut0.poll();       // fut0 immediately gets ownership
+        let guard0 = fut0.poll(); // fut0 immediately gets ownership
         assert!(guard0.as_ref().unwrap().is_ready());
 
         let mut fut1 = rwlock.write();
-        assert!(!fut1.poll().unwrap().is_ready());  // fut1 is blocked
+        assert!(!fut1.poll().unwrap().is_ready()); // fut1 is blocked
 
-        drop(guard0);                   // Ownership transfers to fut1
+        drop(guard0); // Ownership transfers to fut1
         let guard1 = fut1.poll();
         assert!(guard1.as_ref().unwrap().is_ready());
         future::ok::<(), ()>(())
-    })).unwrap();
+    }))
+    .unwrap();
 }
 
 #[test]
@@ -285,7 +291,8 @@ fn write_uncontested() {
         rwlock.write().map(|mut guard| {
             *guard += 5;
         })
-    })).unwrap();
+    }))
+    .unwrap();
     assert_eq!(rwlock.try_unwrap().expect("try_unwrap"), 5);
 }
 
@@ -297,9 +304,7 @@ fn write_order() {
     let fut1 = rwlock.write().map(|mut guard| guard.push(1));
     let mut rt = current_thread::Runtime::new().unwrap();
 
-    let r = rt.block_on(lazy(|| {
-        fut1.and_then(|_| fut2)
-    }));
+    let r = rt.block_on(lazy(|| fut1.and_then(|_| fut2)));
     assert!(r.is_ok());
     assert_eq!(rwlock.try_unwrap().unwrap(), vec![1, 2]);
 }
@@ -316,22 +321,30 @@ fn multithreaded() {
     let parent = lazy(move || {
         tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
             let rwlock_clone4 = rwlock_clone0.clone();
-            rwlock_clone0.write().map(|mut guard| { *guard += 2 })
+            rwlock_clone0
+                .write()
+                .map(|mut guard| *guard += 2)
                 .and_then(move |_| rwlock_clone4.read().map(|_| ()))
         }));
         tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
             let rwlock_clone5 = rwlock_clone1.clone();
-            rwlock_clone1.write().map(|mut guard| { *guard += 3 })
+            rwlock_clone1
+                .write()
+                .map(|mut guard| *guard += 3)
                 .and_then(move |_| rwlock_clone5.read().map(|_| ()))
         }));
         tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
             let rwlock_clone6 = rwlock_clone2.clone();
-            rwlock_clone2.write().map(|mut guard| { *guard += 5 })
+            rwlock_clone2
+                .write()
+                .map(|mut guard| *guard += 5)
                 .and_then(move |_| rwlock_clone6.read().map(|_| ()))
         }));
         tokio::spawn(stream::iter_ok::<_, ()>(0..1000).for_each(move |_| {
             let rwlock_clone7 = rwlock_clone3.clone();
-            rwlock_clone3.write().map(|mut guard| { *guard += 7 })
+            rwlock_clone3
+                .write()
+                .map(|mut guard| *guard += 7)
                 .and_then(move |_| rwlock_clone7.read().map(|_| ()))
         }));
         future::ok::<(), ()>(())
@@ -354,7 +367,8 @@ fn with_read_err() {
             } else {
                 Err("Whoops!")
             }
-        }).unwrap()
+        })
+        .unwrap()
     }));
     assert_eq!(r, Err("Whoops!"));
 }
@@ -366,9 +380,8 @@ fn with_read_ok() {
     let mut rt = current_thread::Runtime::new().unwrap();
 
     let r = rt.block_on(lazy(move || {
-        mtx.with_read(|guard| {
-            Ok(*guard) as Result<i32, ()>
-        }).unwrap()
+        mtx.with_read(|guard| Ok(*guard) as Result<i32, ()>)
+            .unwrap()
     }));
     assert_eq!(r, Ok(5));
 }
@@ -383,9 +396,8 @@ fn with_read_threadpool() {
     let mut rt = runtime::Runtime::new().unwrap();
 
     let r = rt.block_on(lazy(move || {
-        mtx.with_read(|guard| {
-            Ok(*guard) as Result<i32, ()>
-        }).unwrap()
+        mtx.with_read(|guard| Ok(*guard) as Result<i32, ()>)
+            .unwrap()
     }));
     assert_eq!(r, Ok(5));
 }
@@ -397,9 +409,9 @@ fn with_read_local_ok() {
     let rwlock = RwLock::<Rc<i32>>::new(Rc::new(5));
     let mut rt = current_thread::Runtime::new().unwrap();
     let r = rt.block_on(lazy(move || {
-        rwlock.with_read_local(|guard| {
-            Ok(**guard) as Result<i32, ()>
-        }).unwrap()
+        rwlock
+            .with_read_local(|guard| Ok(**guard) as Result<i32, ()>)
+            .unwrap()
     }));
     assert_eq!(r, Ok(5));
 }
@@ -418,7 +430,8 @@ fn with_write_err() {
             } else {
                 Err("Whoops!")
             }
-        }).unwrap()
+        })
+        .unwrap()
     }));
     assert_eq!(r, Err("Whoops!"));
 }
@@ -433,7 +446,8 @@ fn with_write_ok() {
         mtx.with_write(|mut guard| {
             *guard += 1;
             Ok(()) as Result<(), ()>
-        }).unwrap()
+        })
+        .unwrap()
     }));
     assert!(r.is_ok());
     assert_eq!(mtx.try_unwrap().unwrap(), 6);
@@ -453,7 +467,8 @@ fn with_write_threadpool() {
         mtx.with_write(|mut guard| {
             *guard += 1;
             Ok(()) as Result<(), ()>
-        }).unwrap()
+        })
+        .unwrap()
     }));
     assert!(r.is_ok());
     assert_eq!(test_mtx.try_unwrap().unwrap(), 6);
@@ -466,10 +481,12 @@ fn with_write_local_ok() {
     let rwlock = RwLock::<Rc<i32>>::new(Rc::new(5));
     let mut rt = current_thread::Runtime::new().unwrap();
     let r = rt.block_on(lazy(|| {
-        rwlock.with_write_local(|mut guard| {
-            *Rc::get_mut(&mut *guard).unwrap() += 1;
-            Ok(()) as Result<(), ()>
-        }).unwrap()
+        rwlock
+            .with_write_local(|mut guard| {
+                *Rc::get_mut(&mut *guard).unwrap() += 1;
+                Ok(()) as Result<(), ()>
+            })
+            .unwrap()
     }));
     assert!(r.is_ok());
     assert_eq!(*rwlock.try_unwrap().unwrap(), 6);

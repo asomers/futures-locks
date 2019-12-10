@@ -5,8 +5,8 @@ extern crate futures_locks;
 extern crate test;
 extern crate tokio_ as tokio;
 
-use futures::Future;
 use futures::executor::spawn;
+use futures::Future;
 use futures_locks::*;
 use test::Bencher;
 
