@@ -12,8 +12,6 @@ use std::sync::Arc;
 use std::rc::Rc;
 use tokio::{self, sync::Barrier};
 use tokio::runtime;
-#[cfg(feature = "tokio")]
-use tokio::runtime::current_thread;
 use tokio_test::{
     assert_pending,
     assert_ready,
@@ -271,9 +269,8 @@ async fn multithreaded() {
     let b1 = barrier.clone();
     let b2 = barrier.clone();
     let b3 = barrier.clone();
-    let rt = runtime::Runtime::new().unwrap();
 
-    rt.spawn(async move {
+    tokio::task::spawn(async move {
         stream::iter(0..1000).for_each(move |_| {
             let rwlock_clone4 = rwlock_clone0.clone();
             rwlock_clone0.write()
@@ -282,7 +279,7 @@ async fn multithreaded() {
         }).await;
         b0.wait().await;
     });
-    rt.spawn(async move {
+    tokio::task::spawn(async move {
         stream::iter(0..1000).for_each(move |_| {
             let rwlock_clone5 = rwlock_clone1.clone();
             rwlock_clone1.write()
@@ -291,7 +288,7 @@ async fn multithreaded() {
         }).await;
         b1.wait().await;
     });
-    rt.spawn(async move {
+    tokio::task::spawn(async move {
         stream::iter(0..1000).for_each(move |_| {
             let rwlock_clone6 = rwlock_clone2.clone();
             rwlock_clone2.write()
@@ -300,7 +297,7 @@ async fn multithreaded() {
         }).await;
         b2.wait().await;
     });
-    rt.spawn(async move {
+    tokio::task::spawn(async move {
         stream::iter(0..1000).for_each(move |_| {
             let rwlock_clone7 = rwlock_clone3.clone();
             rwlock_clone3.write()
@@ -319,7 +316,7 @@ async fn multithreaded() {
 #[test]
 fn with_read_err() {
     let mtx = RwLock::<i32>::new(-5);
-    let mut rt = current_thread::Runtime::new().unwrap();
+    let mut rt = runtime::Runtime::new().unwrap();
 
     let r = rt.block_on(async {
         mtx.with_read(|guard| {
@@ -337,7 +334,7 @@ fn with_read_err() {
 #[test]
 fn with_read_ok() {
     let mtx = RwLock::<i32>::new(5);
-    let mut rt = current_thread::Runtime::new().unwrap();
+    let mut rt = runtime::Runtime::new().unwrap();
 
     let r = rt.block_on(async {
         mtx.with_read(|guard| {
@@ -354,7 +351,7 @@ fn with_read_ok() {
 #[test]
 fn with_read_threadpool() {
     let mtx = RwLock::<i32>::new(5);
-    let rt = runtime::Runtime::new().unwrap();
+    let mut rt = runtime::Runtime::new().unwrap();
 
     let r = rt.block_on(async {
         mtx.with_read(|guard| {
@@ -369,7 +366,10 @@ fn with_read_threadpool() {
 fn with_read_local_ok() {
     // Note: Rc is not Send
     let rwlock = RwLock::<Rc<i32>>::new(Rc::new(5));
-    let mut rt = current_thread::Runtime::new().unwrap();
+    let mut rt = runtime::Builder::new()
+        .basic_scheduler()
+        .build()
+        .unwrap();
     let r = rt.block_on(async {
         rwlock.with_read_local(|guard| {
             ready(**guard)
@@ -383,7 +383,7 @@ fn with_read_local_ok() {
 #[test]
 fn with_write_err() {
     let mtx = RwLock::<i32>::new(-5);
-    let mut rt = current_thread::Runtime::new().unwrap();
+    let mut rt = runtime::Runtime::new().unwrap();
 
     let r = rt.block_on(async {
         mtx.with_write(|mut guard| {
@@ -402,7 +402,7 @@ fn with_write_err() {
 #[test]
 fn with_write_ok() {
     let mtx = RwLock::<i32>::new(5);
-    let mut rt = current_thread::Runtime::new().unwrap();
+    let mut rt = runtime::Runtime::new().unwrap();
 
     rt.block_on(async {
         mtx.with_write(|mut guard| {
@@ -420,7 +420,7 @@ fn with_write_ok() {
 #[test]
 fn with_write_threadpool() {
     let mtx = RwLock::<i32>::new(5);
-    let rt = runtime::Runtime::new().unwrap();
+    let mut rt = runtime::Runtime::new().unwrap();
 
     rt.block_on(async {
         mtx.with_write(|mut guard| {
@@ -436,7 +436,10 @@ fn with_write_threadpool() {
 fn with_write_local_ok() {
     // Note: Rc is not Send
     let rwlock = RwLock::<Rc<i32>>::new(Rc::new(5));
-    let mut rt = current_thread::Runtime::new().unwrap();
+    let mut rt = runtime::Builder::new()
+        .basic_scheduler()
+        .build()
+        .unwrap();
     rt.block_on(async {
         rwlock.with_write_local(|mut guard| {
             *Rc::get_mut(&mut *guard).unwrap() += 1;

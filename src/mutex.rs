@@ -15,7 +15,7 @@ use std::{
 };
 use super::FutState;
 #[cfg(feature = "tokio")] use futures::FutureExt;
-#[cfg(feature = "tokio")] use tokio_::runtime::current_thread;
+#[cfg(feature = "tokio")] use tokio_::task;
 
 /// An RAII mutex guard, much like `std::sync::MutexGuard`.  The wrapped data
 /// can be accessed via its `Deref` and `DerefMut` implementations.
@@ -353,7 +353,7 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// ```
     /// # use futures_locks::*;
     /// # use futures::{Future, future::ready};
-    /// # use tokio_::runtime::current_thread::Runtime;
+    /// # use tokio_::runtime::Runtime;
     /// # fn main() {
     /// let mtx = Mutex::<u32>::new(0);
     /// let mut rt = Runtime::new().unwrap();
@@ -400,11 +400,11 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// # use futures_locks::*;
     /// # use futures::{Future, future::ready};
     /// # use std::rc::Rc;
-    /// # use tokio_::runtime::current_thread;
+    /// # use tokio_::runtime::Runtime;
     /// # fn main() {
     /// // Note: Rc is not `Send`
     /// let mtx = Mutex::<Rc<u32>>::new(Rc::new(0));
-    /// let mut rt = current_thread::Runtime::new().unwrap();
+    /// let mut rt = Runtime::new().unwrap();
     /// rt.block_on(async {
     ///     mtx.with_local(|mut guard| {
     ///         *Rc::get_mut(&mut *guard).unwrap() += 5;
@@ -423,7 +423,8 @@ impl<T: 'static + ?Sized> Mutex<T> {
               R: 'static
     {
         let (tx, rx) = oneshot::channel::<R>();
-        current_thread::spawn(
+        let local = task::LocalSet::new();
+        local.spawn_local(
             self.lock()
             .then(move |data| {
                 f(data)
@@ -436,7 +437,7 @@ impl<T: 'static + ?Sized> Mutex<T> {
         );
         // We control the sender so we're sure it won't be dropped before
         // sending so we can unwrap safely
-        rx.map(Result::unwrap)
+        local.then(move |_| rx.map(Result::unwrap))
     }
 }
 
