@@ -30,7 +30,7 @@ tokio = ["tokio_"]
 
 [dependencies]
 futures = "0.3.1"
-tokio_ = { version = "0.2.7", features = ["rt-util"], rev = "31ad6c1" , optional = true, package = "tokio" }
+tokio_ = { version = "0.2.7", features = ["rt-util"], optional = true, package = "tokio" }
 
 [dev-dependencies]
 # features, dependencies, dev-dependencies, and build-dependencies all share
