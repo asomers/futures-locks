@@ -25,12 +25,11 @@ features = ["tokio", "nightly-docs"]
 default = ["tokio"]
 # For building documentation only; no functional change to the library.
 nightly-docs = []
-# Enable methods that require a Tokio executor.
-tokio = ["tokio-executor", "tokio_"]
+# Enable methods that require a Tokio runtime.
+tokio = ["tokio_"]
 
 [dependencies]
 futures = "0.3.1"
-tokio-executor = { version = "=0.2.0-alpha.6", optional = true, features = ["current-thread"] }
 tokio_ = { version = "0.2.7", features = ["rt-util"], rev = "31ad6c1" , optional = true, package = "tokio" }
 
 [dev-dependencies]
