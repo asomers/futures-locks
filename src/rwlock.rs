@@ -15,7 +15,7 @@ use std::{
 };
 use super::FutState;
 #[cfg(feature = "tokio")] use futures::FutureExt;
-#[cfg(feature = "tokio")] use tokio_::task;
+#[cfg(feature = "tokio")] use tokio::task;
 
 /// An RAII guard, much like `std::sync::RwLockReadGuard`.  The wrapped data can
 /// be accessed via its `Deref` implementation.
@@ -492,7 +492,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// ```
     /// # use futures_locks::*;
     /// # use futures::{Future, future::ready};
-    /// # use tokio_::runtime::Runtime;
+    /// # use tokio::runtime::Runtime;
     /// # fn main() {
     /// let rwlock = RwLock::<u32>::new(5);
     /// let mut rt = Runtime::new().unwrap();
@@ -514,7 +514,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
               T: Send
     {
         let (tx, rx) = oneshot::channel::<R>();
-        tokio_::spawn(self.read()
+        tokio::spawn(self.read()
             .then(move |data| {
                 f(data)
                 .map(move |result| {
@@ -539,7 +539,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// # use futures_locks::*;
     /// # use futures::{Future, future::ready};
     /// # use std::rc::Rc;
-    /// # use tokio_::runtime::Runtime;
+    /// # use tokio::runtime::Runtime;
     /// # fn main() {
     /// // Note: Rc is not `Send`
     /// let rwlock = RwLock::<Rc<u32>>::new(Rc::new(5));
@@ -595,7 +595,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// ```
     /// # use futures::{Future, future::ready};
     /// # use futures_locks::*;
-    /// # use tokio_::runtime::Runtime;
+    /// # use tokio::runtime::Runtime;
     /// # fn main() {
     /// let rwlock = RwLock::<u32>::new(0);
     /// let mut rt = Runtime::new().unwrap();
@@ -618,7 +618,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
               T: Send
     {
         let (tx, rx) = oneshot::channel::<R>();
-        tokio_::spawn(self.write()
+        tokio::spawn(self.write()
             .then(move |data| {
                 f(data)
                 .map(move |result| {
@@ -643,7 +643,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// # use futures::{Future, future::ready};
     /// # use futures_locks::*;
     /// # use std::rc::Rc;
-    /// # use tokio_::runtime::Runtime;
+    /// # use tokio::runtime::Runtime;
     /// # fn main() {
     /// // Note: Rc is not `Send`
     /// let rwlock = RwLock::<Rc<u32>>::new(Rc::new(0));

@@ -11,6 +11,7 @@ use std::sync::Arc;
 #[cfg(feature = "tokio")]
 use std::rc::Rc;
 use tokio::{self, sync::Barrier};
+#[cfg(feature = "tokio")]
 use tokio::runtime;
 use tokio_test::{
     assert_pending,

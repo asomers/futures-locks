@@ -15,7 +15,7 @@ use std::{
 };
 use super::FutState;
 #[cfg(feature = "tokio")] use futures::FutureExt;
-#[cfg(feature = "tokio")] use tokio_::task;
+#[cfg(feature = "tokio")] use tokio::task;
 
 /// An RAII mutex guard, much like `std::sync::MutexGuard`.  The wrapped data
 /// can be accessed via its `Deref` and `DerefMut` implementations.
@@ -353,7 +353,7 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// ```
     /// # use futures_locks::*;
     /// # use futures::{Future, future::ready};
-    /// # use tokio_::runtime::Runtime;
+    /// # use tokio::runtime::Runtime;
     /// # fn main() {
     /// let mtx = Mutex::<u32>::new(0);
     /// let mut rt = Runtime::new().unwrap();
@@ -376,7 +376,7 @@ impl<T: 'static + ?Sized> Mutex<T> {
               T: Send
     {
         let (tx, rx) = oneshot::channel::<R>();
-        tokio_::spawn(self.lock()
+        tokio::spawn(self.lock()
             .then(move |data| {
                 f(data)
                 .map(move |result| {
@@ -400,7 +400,7 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// # use futures_locks::*;
     /// # use futures::{Future, future::ready};
     /// # use std::rc::Rc;
-    /// # use tokio_::runtime::Runtime;
+    /// # use tokio::runtime::Runtime;
     /// # fn main() {
     /// // Note: Rc is not `Send`
     /// let mtx = Mutex::<Rc<u32>>::new(Rc::new(0));
