@@ -1,7 +1,7 @@
 #![feature(test)]
 
 extern crate test;
-extern crate tokio_ as tokio;
+extern crate tokio as tokio;
 
 use futures::{
     FutureExt,
