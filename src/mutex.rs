@@ -375,20 +375,10 @@ impl<T: 'static + ?Sized> Mutex<T> {
               R: Send + 'static,
               T: Send
     {
-        let (tx, rx) = oneshot::channel::<R>();
-        tokio::spawn(self.lock()
-            .then(move |data| {
-                f(data)
-                .map(move |result| {
-                    //Swallow errors; there's nothing to do if the
-                    //receiver got cancelled
-                   let _ = tx.send(result);
-               })
-            })
-        );
-         //We control the sender so we're sure it won't be dropped before
-         //sending so we can unwrap safely
-        rx.map(Result::unwrap)
+        tokio::spawn({
+            self.lock()
+            .then(f)
+        }).map(Result::unwrap)
     }
 
     /// Like [`with`](#method.with) but for Futures that aren't `Send`.
@@ -422,22 +412,12 @@ impl<T: 'static + ?Sized> Mutex<T> {
               B: Future<Output = R> + 'static + Unpin,
               R: 'static
     {
-        let (tx, rx) = oneshot::channel::<R>();
         let local = task::LocalSet::new();
-        local.spawn_local(
+        let jh = local.spawn_local(
             self.lock()
-            .then(move |data| {
-                f(data)
-                .map(move |result| {
-                    //Swallow errors; there's nothing to do if the
-                    //receiver got cancelled
-                   let _ = tx.send(result);
-               })
-            })
+            .then(f)
         );
-        // We control the sender so we're sure it won't be dropped before
-        // sending so we can unwrap safely
-        local.then(move |_| rx.map(Result::unwrap))
+        local.then(move |_| jh).map(Result::unwrap)
     }
 }
 
