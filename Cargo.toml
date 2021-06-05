@@ -29,13 +29,10 @@ nightly-docs = []
 
 [dependencies]
 futures = "0.3.1"
-tokio = { version = "0.2.7", features = ["rt-core", "rt-util"], optional = true }
+tokio = { version = "1.0", features = ["rt"], optional = true }
 
 [dev-dependencies]
-# features, dependencies, dev-dependencies, and build-dependencies all share
-# the same namespace. To avoid a clash with the `tokio` feature, rename the
-# `tokio` dev-dependency. See https://github.com/rust-lang/cargo/issues/4866.
-tokio = { version = "0.2.7", features = ["sync", "macros", "rt-threaded"] }
+tokio = { version = "1.0", features = ["sync", "macros", "rt-multi-thread"] }
 tokio-test = { version = "0.2.0" }
 
 [[test]]

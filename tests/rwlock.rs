@@ -317,7 +317,7 @@ async fn multithreaded() {
 #[test]
 fn with_read_err() {
     let mtx = RwLock::<i32>::new(-5);
-    let mut rt = runtime::Runtime::new().unwrap();
+    let rt = runtime::Builder::new_current_thread().build().unwrap();
 
     let r = rt.block_on(async {
         mtx.with_read(|guard| {
@@ -335,7 +335,7 @@ fn with_read_err() {
 #[test]
 fn with_read_ok() {
     let mtx = RwLock::<i32>::new(5);
-    let mut rt = runtime::Runtime::new().unwrap();
+    let rt = runtime::Builder::new_current_thread().build().unwrap();
 
     let r = rt.block_on(async {
         mtx.with_read(|guard| {
@@ -352,7 +352,7 @@ fn with_read_ok() {
 #[test]
 fn with_read_threadpool() {
     let mtx = RwLock::<i32>::new(5);
-    let mut rt = runtime::Runtime::new().unwrap();
+    let rt = runtime::Builder::new_multi_thread().build().unwrap();
 
     let r = rt.block_on(async {
         mtx.with_read(|guard| {
@@ -367,10 +367,7 @@ fn with_read_threadpool() {
 fn with_read_local_ok() {
     // Note: Rc is not Send
     let rwlock = RwLock::<Rc<i32>>::new(Rc::new(5));
-    let mut rt = runtime::Builder::new()
-        .basic_scheduler()
-        .build()
-        .unwrap();
+    let rt = runtime::Builder::new_current_thread().build().unwrap();
     let r = rt.block_on(async {
         rwlock.with_read_local(|guard| {
             ready(**guard)
@@ -384,7 +381,7 @@ fn with_read_local_ok() {
 #[test]
 fn with_write_err() {
     let mtx = RwLock::<i32>::new(-5);
-    let mut rt = runtime::Runtime::new().unwrap();
+    let rt = runtime::Builder::new_current_thread().build().unwrap();
 
     let r = rt.block_on(async {
         mtx.with_write(|mut guard| {
@@ -403,7 +400,7 @@ fn with_write_err() {
 #[test]
 fn with_write_ok() {
     let mtx = RwLock::<i32>::new(5);
-    let mut rt = runtime::Runtime::new().unwrap();
+    let rt = runtime::Builder::new_current_thread().build().unwrap();
 
     rt.block_on(async {
         mtx.with_write(|mut guard| {
@@ -421,7 +418,7 @@ fn with_write_ok() {
 #[test]
 fn with_write_threadpool() {
     let mtx = RwLock::<i32>::new(5);
-    let mut rt = runtime::Runtime::new().unwrap();
+    let rt = runtime::Builder::new_multi_thread().build().unwrap();
 
     rt.block_on(async {
         mtx.with_write(|mut guard| {
@@ -437,10 +434,7 @@ fn with_write_threadpool() {
 fn with_write_local_ok() {
     // Note: Rc is not Send
     let rwlock = RwLock::<Rc<i32>>::new(Rc::new(5));
-    let mut rt = runtime::Builder::new()
-        .basic_scheduler()
-        .build()
-        .unwrap();
+    let rt = runtime::Builder::new_current_thread().build().unwrap();
     rt.block_on(async {
         rwlock.with_write_local(|mut guard| {
             *Rc::get_mut(&mut *guard).unwrap() += 1;
