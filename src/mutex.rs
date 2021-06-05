@@ -58,11 +58,11 @@ impl<T: ?Sized> MutexFut<T> {
 
 impl<T: ?Sized> Drop for MutexFut<T> {
     fn drop(&mut self) {
-        match &mut self.state {
-            &mut FutState::New => {
+        match self.state {
+            FutState::New => {
                 // Mutex hasn't yet been modified; nothing to do
             },
-            &mut FutState::Pending(ref mut rx) => {
+            FutState::Pending(ref mut rx) => {
                 rx.close();
                 match rx.try_recv() {
                     Ok(Some(())) => {
@@ -80,7 +80,7 @@ impl<T: ?Sized> Drop for MutexFut<T> {
                     }
                 }
             },
-            &mut FutState::Acquired => {
+            FutState::Acquired => {
                 // The MutexGuard will take care of releasing the Mutex
             }
         }
@@ -91,8 +91,8 @@ impl<T: ?Sized> Future for MutexFut<T> {
     type Output = MutexGuard<T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        let (result, new_state) = match &mut self.state {
-            &mut FutState::New => {
+        let (result, new_state) = match self.state {
+            FutState::New => {
                 let mut mtx_data = self.mutex.inner.mutex.lock()
                     .expect("sync::Mutex::lock");
                 if mtx_data.owned {
@@ -108,7 +108,7 @@ impl<T: ?Sized> Future for MutexFut<T> {
                     (Poll::Ready(guard), FutState::Acquired)
                 }
             },
-            &mut FutState::Pending(ref mut rx) => {
+            FutState::Pending(ref mut rx) => {
                 match Pin::new(rx).poll(cx) {
                     Poll::Pending => return Poll::Pending,
                     Poll::Ready(_) => {
@@ -120,7 +120,7 @@ impl<T: ?Sized> Future for MutexFut<T> {
                     }  //LCOV_EXCL_LINE    kcov false negative
                 }
             },
-            &mut FutState::Acquired => panic!("Double-poll of ready Future")
+            FutState::Acquired => panic!("Double-poll of ready Future")
         };
         self.state = new_state;
         result

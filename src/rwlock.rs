@@ -79,11 +79,11 @@ impl<T: ?Sized> RwLockReadFut<T> {
 
 impl<T: ?Sized> Drop for RwLockReadFut<T> {
     fn drop(&mut self) {
-        match &mut self.state {
-            &mut FutState::New => {
+        match self.state {
+            FutState::New => {
                 // RwLock hasn't yet been modified; nothing to do
             },
-            &mut FutState::Pending(ref mut rx) => {
+            FutState::Pending(ref mut rx) => {
                 rx.close();
                 match rx.try_recv() {
                     Ok(Some(())) => {
@@ -101,7 +101,7 @@ impl<T: ?Sized> Drop for RwLockReadFut<T> {
                     }
                 }
             },
-            &mut FutState::Acquired => {
+            FutState::Acquired => {
                 // The RwLockReadGuard will take care of releasing the RwLock
             }
         }
@@ -112,8 +112,8 @@ impl<T: ?Sized> Future for RwLockReadFut<T> {
     type Output = RwLockReadGuard<T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        let (result, new_state) = match &mut self.state {
-            &mut FutState::New => {
+        let (result, new_state) = match self.state {
+            FutState::New => {
                 let mut lock_data = self.rwlock.inner.mutex.lock()
                     .expect("sync::Mutex::lock");
                 if lock_data.exclusive {
@@ -129,7 +129,7 @@ impl<T: ?Sized> Future for RwLockReadFut<T> {
                     (Poll::Ready(guard), FutState::Acquired)
                 }
             },
-            &mut FutState::Pending(ref mut rx) => {
+            FutState::Pending(ref mut rx) => {
                 match Pin::new(rx).poll(cx) {
                     Poll::Pending => return Poll::Pending,
                     Poll::Ready(_) => {
@@ -141,7 +141,7 @@ impl<T: ?Sized> Future for RwLockReadFut<T> {
                     }  // LCOV_EXCL_LINE   kcov false negative
                 }
             },
-            &mut FutState::Acquired => panic!("Double-poll of ready Future")
+            FutState::Acquired => panic!("Double-poll of ready Future")
         };
         self.state = new_state;
         result
@@ -162,11 +162,11 @@ impl<T: ?Sized> RwLockWriteFut<T> {
 
 impl<T: ?Sized> Drop for RwLockWriteFut<T> {
     fn drop(&mut self) {
-        match &mut self.state {
-            &mut FutState::New => {
+        match self.state {
+            FutState::New => {
                 // RwLock hasn't yet been modified; nothing to do
             },
-            &mut FutState::Pending(ref mut rx) => {
+            FutState::Pending(ref mut rx) => {
                 rx.close();
                 match rx.try_recv() {
                     Ok(Some(())) => {
@@ -184,7 +184,7 @@ impl<T: ?Sized> Drop for RwLockWriteFut<T> {
                     }
                 }
             },
-            &mut FutState::Acquired => {
+            FutState::Acquired => {
                 // The RwLockWriteGuard will take care of releasing the RwLock
             }
         }
@@ -195,8 +195,8 @@ impl<T: ?Sized> Future for RwLockWriteFut<T> {
     type Output = RwLockWriteGuard<T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        let (result, new_state) = match &mut self.state {
-            &mut FutState::New => {
+        let (result, new_state) = match self.state {
+            FutState::New => {
                 let mut lock_data = self.rwlock.inner.mutex.lock()
                     .expect("sync::Mutex::lock");
                 if lock_data.exclusive || lock_data.num_readers > 0 {
@@ -212,7 +212,7 @@ impl<T: ?Sized> Future for RwLockWriteFut<T> {
                     (Poll::Ready(guard), FutState::Acquired)
                 }
             },
-            &mut FutState::Pending(ref mut rx) => {
+            FutState::Pending(ref mut rx) => {
                 match Pin::new(rx).poll(cx) {
                     Poll::Pending => return Poll::Pending,
                     Poll::Ready(_) => {
@@ -224,7 +224,7 @@ impl<T: ?Sized> Future for RwLockWriteFut<T> {
                     }  // LCOV_EXCL_LINE   kcov false negative
                 }
             },
-            &mut FutState::Acquired => panic!("Double-poll of ready Future")
+            FutState::Acquired => panic!("Double-poll of ready Future")
         };
         self.state = new_state;
         result
@@ -353,7 +353,7 @@ impl<T: ?Sized> RwLock<T> {
     ///
     /// ```
     pub fn read(&self) -> RwLockReadFut<T> {
-        return RwLockReadFut::new(FutState::New, self.clone())
+        RwLockReadFut::new(FutState::New, self.clone())
     }
 
     /// Acquire the `RwLock` exclusively, read-write, blocking the task in the
@@ -376,7 +376,7 @@ impl<T: ?Sized> RwLock<T> {
     ///
     /// ```
     pub fn write(&self) -> RwLockWriteFut<T> {
-        return RwLockWriteFut::new(FutState::New, self.clone())
+        RwLockWriteFut::new(FutState::New, self.clone())
     }
 
     /// Attempts to acquire the `RwLock` nonexclusively.
