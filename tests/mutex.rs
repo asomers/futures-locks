@@ -219,7 +219,7 @@ fn try_unwrap_multiply_referenced() {
 #[test]
 fn with_err() {
     let mtx = Mutex::<i32>::new(-5);
-    let mut rt = runtime::Runtime::new().unwrap();
+    let rt = runtime::Builder::new_current_thread().build().unwrap();
     let r = rt.block_on(async {
         mtx.with(|guard| {
             if *guard > 0 {
@@ -236,7 +236,7 @@ fn with_err() {
 #[test]
 fn with_ok() {
     let mtx = Mutex::<i32>::new(5);
-    let mut rt = runtime::Runtime::new().unwrap();
+    let rt = runtime::Builder::new_current_thread().build().unwrap();
     let r = rt.block_on(async {
         mtx.with(|guard| {
             ready(*guard)
@@ -252,7 +252,7 @@ fn with_ok() {
 #[test]
 fn with_threadpool() {
     let mtx = Mutex::<i32>::new(5);
-    let mut rt = runtime::Runtime::new().unwrap();
+    let rt = runtime::Builder::new_multi_thread().build().unwrap();
     let r = rt.block_on(async {
         mtx.with(|guard| {
             ready(*guard)
@@ -266,10 +266,7 @@ fn with_threadpool() {
 fn with_local_ok() {
     // Note: Rc is not Send
     let mtx = Mutex::<Rc<i32>>::new(Rc::new(5));
-    let mut rt = runtime::Builder::new()
-        .basic_scheduler()
-        .build()
-        .unwrap();
+    let rt = runtime::Builder::new_current_thread().build().unwrap();
     let r = rt.block_on(async {
         mtx.with_local(|guard| {
             ready(**guard)

@@ -6,9 +6,13 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 ## [Unreleased] - ReleaseDate
 ### Added
 ### Changed
+- Updated to Tokio 1.0.  Crates needing Tokio 0.2 must stay on the 0.6 branch.
+  ([#42](https://github.com/asomers/futures-locks/pull/42))
+
 - `Mutex::try_lock`, `RwLock::try_read`, and `RwLock::try_write`, now return a
   dedicated error type instead of `()`, and it implements `std::error::Error`.
   ([#41](https://github.com/asomers/futures-locks/pull/41))
+
 ### Fixed
 ### Removed
 
