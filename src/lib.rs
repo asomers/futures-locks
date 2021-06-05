@@ -35,6 +35,7 @@ pub use rwlock::{RwLock, RwLockReadFut, RwLockWriteFut,
                  RwLockReadGuard, RwLockWriteGuard};
 
 use futures::channel::oneshot;
+use std::{error, fmt};
 
 /// Poll state of all Futures in this crate.
 enum FutState {
@@ -42,3 +43,16 @@ enum FutState {
     Pending(oneshot::Receiver<()>),
     Acquired
 }
+
+/// The lock could not be acquired at this time because the operation would
+/// otherwise block.
+#[derive(Clone, Copy, Debug)]
+pub struct TryLockError;
+
+impl fmt::Display for TryLockError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "try_lock failed because the operation would block")
+    }
+}
+
+impl error::Error for TryLockError {}

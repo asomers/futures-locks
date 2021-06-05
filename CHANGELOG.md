@@ -3,6 +3,15 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [Unreleased] - ReleaseDate
+### Added
+### Changed
+- `Mutex::try_lock`, `RwLock::try_read`, and `RwLock::try_write`, now return a
+  dedicated error type instead of `()`, and it implements `std::error::Error`.
+  ([#41](https://github.com/asomers/futures-locks/pull/41))
+### Fixed
+### Removed
+
 ## [0.6.0] - ReleaseNotes
 ### Added
 ### Changed
