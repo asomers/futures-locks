@@ -13,7 +13,7 @@ use std::{
     pin::Pin,
     sync
 };
-use super::FutState;
+use super::{FutState, TryLockError};
 #[cfg(feature = "tokio")] use futures::FutureExt;
 #[cfg(feature = "tokio")] use tokio::task;
 
@@ -300,14 +300,14 @@ impl<T: ?Sized> Mutex<T> {
     /// let mut mtx = Mutex::<u32>::new(0);
     /// match mtx.try_lock() {
     ///     Ok(mut guard) => *guard += 5,
-    ///     Err(()) => println!("Better luck next time!")
+    ///     Err(_) => println!("Better luck next time!")
     /// };
     /// # }
     /// ```
-    pub fn try_lock(&self) -> Result<MutexGuard<T>, ()> {
+    pub fn try_lock(&self) -> Result<MutexGuard<T>, TryLockError> {
         let mut mtx_data = self.inner.mutex.lock().expect("sync::Mutex::lock");
         if mtx_data.owned {
-            Err(())
+            Err(TryLockError)
         } else {
             mtx_data.owned = true;
             Ok(MutexGuard{mutex: self.clone()})

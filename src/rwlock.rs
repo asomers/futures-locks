@@ -13,7 +13,7 @@ use std::{
     pin::Pin,
     sync,
 };
-use super::FutState;
+use super::{FutState, TryLockError};
 #[cfg(feature = "tokio")] use futures::FutureExt;
 #[cfg(feature = "tokio")] use tokio::task;
 
@@ -391,15 +391,15 @@ impl<T: ?Sized> RwLock<T> {
     /// let mut lock = RwLock::<u32>::new(5);
     /// let r = match lock.try_read() {
     ///     Ok(guard) => *guard,
-    ///     Err(()) => panic!("Better luck next time!")
+    ///     Err(_) => panic!("Better luck next time!")
     /// };
     /// assert_eq!(5, r);
     /// # }
     /// ```
-    pub fn try_read(&self) -> Result<RwLockReadGuard<T>, ()> {
+    pub fn try_read(&self) -> Result<RwLockReadGuard<T>, TryLockError> {
         let mut lock_data = self.inner.mutex.lock().expect("sync::Mutex::lock");
         if lock_data.exclusive {
-            Err(())
+            Err(TryLockError)
         } else {
             lock_data.num_readers += 1;
             Ok(RwLockReadGuard{rwlock: self.clone()})
@@ -418,15 +418,15 @@ impl<T: ?Sized> RwLock<T> {
     /// let mut lock = RwLock::<u32>::new(5);
     /// match lock.try_write() {
     ///     Ok(mut guard) => *guard += 5,
-    ///     Err(()) => panic!("Better luck next time!")
+    ///     Err(_) => panic!("Better luck next time!")
     /// }
     /// assert_eq!(10, lock.try_unwrap().unwrap());
     /// # }
     /// ```
-    pub fn try_write(&self) -> Result<RwLockWriteGuard<T>, ()> {
+    pub fn try_write(&self) -> Result<RwLockWriteGuard<T>, TryLockError> {
         let mut lock_data = self.inner.mutex.lock().expect("sync::Mutex::lock");
         if lock_data.exclusive || lock_data.num_readers > 0 {
-            Err(())
+            Err(TryLockError)
         } else {
             lock_data.exclusive = true;
             Ok(RwLockWriteGuard{rwlock: self.clone()})
