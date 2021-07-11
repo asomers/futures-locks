@@ -11,12 +11,8 @@ Futures-aware lock primitives
 """
 categories = ["asynchronous"]
 documentation = "https://docs.rs/futures-locks"
-exclude = [
-	".gitignore",
-	".travis.yml",
-	"release.toml"
-]
 autotests = false
+include = ["src/**/*", "LICENSE-*", "README.md", "CHANGELOG.md"]
 
 [package.metadata.docs.rs]
 features = ["tokio", "nightly-docs"]
