@@ -1,7 +1,6 @@
 // vim: tw=80
 
 use futures::{
-    Future,
     channel::oneshot,
     task::{Context, Poll}
 };
@@ -9,6 +8,7 @@ use std::{
     cell::UnsafeCell,
     clone::Clone,
     collections::VecDeque,
+    future::Future,
     ops::{Deref, DerefMut},
     pin::Pin,
     sync,
