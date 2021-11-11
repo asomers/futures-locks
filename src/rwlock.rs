@@ -645,7 +645,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
 }
 
 unsafe impl<T: ?Sized + Send> Send for RwLock<T> {}
-unsafe impl<T: ?Sized + Send> Sync for RwLock<T> {}
+unsafe impl<T: ?Sized + Send + Sync> Sync for RwLock<T> {}
 
 // LCOV_EXCL_START
 #[cfg(test)]
