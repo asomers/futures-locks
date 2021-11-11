@@ -1,9 +1,7 @@
 // vim: tw=80
 
-use futures::{
-    channel::oneshot,
-    task::{Context, Poll}
-};
+use futures_channel::oneshot;
+use futures_task::{Context, Poll};
 use std::{
     cell::UnsafeCell,
     clone::Clone,
