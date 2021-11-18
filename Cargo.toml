@@ -15,13 +15,12 @@ autotests = false
 include = ["src/**/*", "LICENSE-*", "README.md", "CHANGELOG.md"]
 
 [package.metadata.docs.rs]
-features = ["tokio", "nightly-docs"]
+features = ["tokio"]
+rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 # Enable methods that require a Tokio runtime.
 default = ["tokio"]
-# For building documentation only; no functional change to the library.
-nightly-docs = []
 
 [dependencies]
 futures-channel = "0.3.1"
