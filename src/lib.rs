@@ -26,6 +26,7 @@
 //! [`Tokio`]: https:/tokio.rs
 
 #![cfg_attr(feature = "nightly-docs", feature(doc_cfg))]
+#![warn(missing_docs)]
 
 mod mutex;
 mod rwlock;

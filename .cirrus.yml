@@ -1,5 +1,7 @@
 test_task:
   name: cargo test 
+  env:
+    RUSTDOCFLAGS: -D warnings
   matrix:
     - container:
        image: rust:1.45.0
