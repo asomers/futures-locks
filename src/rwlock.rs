@@ -1,20 +1,17 @@
 // vim: tw=80
 
-use futures::{
-    Future,
-    channel::oneshot,
-    task::{Context, Poll}
-};
+use futures_channel::oneshot;
+use futures_task::{Context, Poll};
 use std::{
     cell::UnsafeCell,
     clone::Clone,
     collections::VecDeque,
+    future::Future,
     ops::{Deref, DerefMut},
     pin::Pin,
     sync,
 };
 use super::{FutState, TryLockError};
-#[cfg(feature = "tokio")] use futures::FutureExt;
 #[cfg(feature = "tokio")] use tokio::task;
 
 /// An RAII guard, much like `std::sync::RwLockReadGuard`.  The wrapped data can
@@ -513,10 +510,12 @@ impl<T: 'static + ?Sized> RwLock<T> {
               R: Send + 'static,
               T: Send
     {
-        tokio::spawn({
-            self.read()
-            .then(f)
-        }).map(Result::unwrap)
+        let jh = tokio::spawn({
+            let fut = self.read();
+            async move { f(fut.await).await }
+        });
+
+        async move { jh.await.unwrap() }
     }
 
     /// Like [`with_read`](#method.with_read) but for Futures that aren't
@@ -551,11 +550,15 @@ impl<T: 'static + ?Sized> RwLock<T> {
               R: 'static
     {
         let local = task::LocalSet::new();
-        let jh = local.spawn_local(
-            self.read()
-            .then(f)
-        );
-        local.then(move |_| jh).map(Result::unwrap)
+        let jh = local.spawn_local({
+            let fut = self.read();
+            async move { f(fut.await).await }
+        });
+
+        async move {
+            local.await;
+            jh.await.unwrap()
+        }
     }
 
     /// Acquires a `RwLock` exclusively and performs a computation on its
@@ -597,10 +600,12 @@ impl<T: 'static + ?Sized> RwLock<T> {
               R: Send + 'static,
               T: Send
     {
-        tokio::spawn({
-            self.write()
-            .then(f)
-        }).map(Result::unwrap)
+        let jh = tokio::spawn({
+            let fut = self.write();
+            async move { f(fut.await).await }
+        });
+
+        async move { jh.await.unwrap() }
     }
 
     /// Like [`with_write`](#method.with_write) but for Futures that aren't
@@ -636,11 +641,15 @@ impl<T: 'static + ?Sized> RwLock<T> {
               R: 'static
     {
         let local = task::LocalSet::new();
-        let jh = local.spawn_local(
-            self.write()
-            .then(f)
-        );
-        local.then(move |_| jh).map(Result::unwrap)
+        let jh = local.spawn_local({
+            let fut = self.write();
+            async move { f(fut.await).await }
+        });
+
+        async move {
+            local.await;
+            jh.await.unwrap()
+        }
     }
 }
 

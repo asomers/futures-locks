@@ -34,7 +34,7 @@ pub use mutex::{Mutex, MutexFut, MutexGuard, MutexWeak};
 pub use rwlock::{RwLock, RwLockReadFut, RwLockWriteFut,
                  RwLockReadGuard, RwLockWriteGuard};
 
-use futures::channel::oneshot;
+use futures_channel::oneshot;
 use std::{error, fmt};
 
 /// Poll state of all Futures in this crate.
