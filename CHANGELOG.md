@@ -21,7 +21,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Removed
 
-## [0.6.0] - ReleaseNotes
+## [0.6.0] - 2020-09-07
 ### Added
 ### Changed
 - Updated to `std::future`.  `futures-locks` no longer works with
