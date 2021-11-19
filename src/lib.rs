@@ -25,7 +25,8 @@
 //! [`Futures`]: https://github.com/rust-lang-nursery/futures-rs
 //! [`Tokio`]: https:/tokio.rs
 
-#![cfg_attr(feature = "nightly-docs", feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![warn(missing_docs)]
 
 mod mutex;
 mod rwlock;

@@ -363,8 +363,8 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// assert_eq!(mtx.try_unwrap().unwrap(), 5);
     /// # }
     /// ```
-    #[cfg(any(feature = "tokio", all(feature = "nightly-docs", rustdoc)))]
-    #[cfg_attr(feature = "nightly-docs", doc(cfg(feature = "tokio")))]
+    #[cfg(any(feature = "tokio", all(docsrs, rustdoc)))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
     pub fn with<B, F, R>(&self, f: F)
         -> impl Future<Output = R>
         where F: FnOnce(MutexGuard<T>) -> B + Send + 'static,
@@ -403,8 +403,8 @@ impl<T: 'static + ?Sized> Mutex<T> {
     /// assert_eq!(*mtx.try_unwrap().unwrap(), 5);
     /// # }
     /// ```
-    #[cfg(any(feature = "tokio", all(feature = "nightly-docs", rustdoc)))]
-    #[cfg_attr(feature = "nightly-docs", doc(cfg(feature = "tokio")))]
+    #[cfg(any(feature = "tokio", all(docsrs, rustdoc)))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
     pub fn with_local<B, F, R>(&self, f: F)
         -> impl Future<Output = R>
         where F: FnOnce(MutexGuard<T>) -> B + 'static,

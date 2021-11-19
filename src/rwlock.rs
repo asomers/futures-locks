@@ -501,8 +501,8 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// assert_eq!(r, 5);
     /// # }
     /// ```
-    #[cfg(any(feature = "tokio", all(feature = "nightly-docs", rustdoc)))]
-    #[cfg_attr(feature = "nightly-docs", doc(cfg(feature = "tokio")))]
+    #[cfg(any(feature = "tokio", all(docsrs, rustdoc)))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
     pub fn with_read<B, F, R>(&self, f: F)
         -> impl Future<Output = R>
         where F: FnOnce(RwLockReadGuard<T>) -> B + Send + 'static,
@@ -541,8 +541,8 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// assert_eq!(r, 5);
     /// # }
     /// ```
-    #[cfg(any(feature = "tokio", all(feature = "nightly-docs", rustdoc)))]
-    #[cfg_attr(feature = "nightly-docs", doc(cfg(feature = "tokio")))]
+    #[cfg(any(feature = "tokio", all(docsrs, rustdoc)))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
     pub fn with_read_local<B, F, R>(&self, f: F)
         -> impl Future<Output = R>
         where F: FnOnce(RwLockReadGuard<T>) -> B + 'static + Unpin,
@@ -591,8 +591,8 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// assert_eq!(rwlock.try_unwrap().unwrap(), 5);
     /// # }
     /// ```
-    #[cfg(any(feature = "tokio", all(feature = "nightly-docs", rustdoc)))]
-    #[cfg_attr(feature = "nightly-docs", doc(cfg(feature = "tokio")))]
+    #[cfg(any(feature = "tokio", all(docsrs, rustdoc)))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
     pub fn with_write<B, F, R>(&self, f: F)
         -> impl Future<Output = R>
         where F: FnOnce(RwLockWriteGuard<T>) -> B + Send + 'static,
@@ -632,8 +632,8 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// assert_eq!(*rwlock.try_unwrap().unwrap(), 5);
     /// # }
     /// ```
-    #[cfg(any(feature = "tokio", all(feature = "nightly-docs", rustdoc)))]
-    #[cfg_attr(feature = "nightly-docs", doc(cfg(feature = "tokio")))]
+    #[cfg(any(feature = "tokio", all(docsrs, rustdoc)))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
     pub fn with_write_local<B, F, R>(&self, f: F)
         -> impl Future<Output = R>
         where F: FnOnce(RwLockWriteGuard<T>) -> B + 'static + Unpin,
