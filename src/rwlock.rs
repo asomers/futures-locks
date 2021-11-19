@@ -653,6 +653,9 @@ impl<T: 'static + ?Sized> RwLock<T> {
     }
 }
 
+// Clippy doesn't like the Arc within Inner.  But the access rules of the RwLock
+// make it safe to send.  std::sync::RwLock has the same Send impl
+#[allow(clippy::non_send_fields_in_send_ty)]
 unsafe impl<T: ?Sized + Send> Send for RwLock<T> {}
 unsafe impl<T: ?Sized + Send + Sync> Sync for RwLock<T> {}
 

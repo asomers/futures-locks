@@ -28,6 +28,10 @@ test_task:
     - if rustc --version | grep -q nightly; then
     -   cargo doc --all-features --no-deps
     - fi
+  clippy_script:
+    - if rustc --version | grep -q nightly; then
+    -   cargo clippy --all-features --all-targets
+    - fi
   before_cache_script: rm -rf $CARGO_HOME/registry/index
 
 codecov_task:

@@ -175,6 +175,9 @@ impl<T: ?Sized> Clone for MutexWeak<T> {
     }
 }
 
+// Clippy doesn't like the Arc within Inner.  But the access rules of the Mutex
+// make it safe to send.  std::sync::Mutex has the same Send impl
+#[allow(clippy::non_send_fields_in_send_ty)]
 unsafe impl<T: ?Sized + Send> Send for MutexWeak<T> {}
 unsafe impl<T: ?Sized + Send> Sync for MutexWeak<T> {}
 
@@ -424,6 +427,9 @@ impl<T: 'static + ?Sized> Mutex<T> {
     }
 }
 
+// Clippy doesn't like the Arc within Inner.  But the access rules of the Mutex
+// make it safe to send.  std::sync::Mutex has the same Send impl
+#[allow(clippy::non_send_fields_in_send_ty)]
 unsafe impl<T: ?Sized + Send> Send for Mutex<T> {}
 unsafe impl<T: ?Sized + Send> Sync for Mutex<T> {}
 
