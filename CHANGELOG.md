@@ -14,6 +14,11 @@ This project adheres to [Semantic Versioning](http://semver.org/).
   ([#41](https://github.com/asomers/futures-locks/pull/41))
 
 ### Fixed
+
+- Fixed a soundness issue with `RwLock`: it shouldn't implement `Sync` unless
+  its inner type also does.
+  ([#45](https://github.com/asomers/futures-locks/pull/45))
+
 ### Removed
 
 ## [0.6.0] - ReleaseNotes
