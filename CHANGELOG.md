@@ -3,7 +3,7 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
-## [Unreleased] - ReleaseDate
+## [0.7.0] - 2021-11-18
 ### Added
 ### Changed
 - Updated to Tokio 1.0.  Crates needing Tokio 0.2 must stay on the 0.6 branch.
