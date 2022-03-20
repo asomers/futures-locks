@@ -4,7 +4,7 @@ test_task:
     RUSTDOCFLAGS: -D warnings
   matrix:
     - container:
-       image: rust:1.45.0
+       image: rust:1.49.0
     - container:
        image: rust:latest
     - container:
@@ -31,6 +31,11 @@ test_task:
   clippy_script:
     - if rustc --version | grep -q nightly; then
     -   cargo clippy --all-features --all-targets
+    - fi
+  audit_script:
+    - if rustc --version | grep -q nightly; then
+    -   cargo install cargo-audit
+    -   cargo audit
     - fi
   before_cache_script: rm -rf $CARGO_HOME/registry/index
 
