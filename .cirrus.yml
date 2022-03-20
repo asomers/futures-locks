@@ -32,6 +32,11 @@ test_task:
     - if rustc --version | grep -q nightly; then
     -   cargo clippy --all-features --all-targets
     - fi
+  audit_script:
+    - if rustc --version | grep -q nightly; then
+    -   cargo install cargo-audit
+    -   cargo audit
+    - fi
   before_cache_script: rm -rf $CARGO_HOME/registry/index
 
 codecov_task:
