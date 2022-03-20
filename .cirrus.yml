@@ -4,7 +4,7 @@ test_task:
     RUSTDOCFLAGS: -D warnings
   matrix:
     - container:
-       image: rust:1.45.0
+       image: rust:1.49.0
     - container:
        image: rust:latest
     - container:
