@@ -30,7 +30,7 @@ tokio = { version = "1.0", features = ["rt"], optional = true }
 [dev-dependencies]
 futures = "0.3.1"
 tokio = { version = "1.0", features = ["sync", "macros", "rt-multi-thread"] }
-tokio-test = { version = "0.2.0" }
+tokio-test = { version = "0.4.2" }
 
 [[test]]
 name = "functional"
