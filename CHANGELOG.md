@@ -3,6 +3,12 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [Unreleased] - ReleaseDate
+
+- The published package on crates.io now includes functional tests.  No
+  user-visible changes.
+  ([#53](https://github.com/asomers/futures-locks/pull/53))
+
 ## [0.7.0] - 2021-11-18
 ### Added
 ### Changed
