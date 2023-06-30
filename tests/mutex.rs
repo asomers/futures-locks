@@ -35,6 +35,7 @@ fn mutex_weak_none() {
 }
 
 // Compare Mutexes if it point to the same value
+#[allow(clippy::redundant_clone)]   // The clone is the whole point
 #[test]
 fn mutex_eq_ptr_true() {
     let mutex = Mutex::<u32>::new(0);
