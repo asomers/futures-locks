@@ -216,6 +216,9 @@ impl<T: ?Sized> Clone for Mutex<T> {
 
 impl<T> Mutex<T> {
     /// Create a new `Mutex` in the unlocked state.
+    // Clippy doesn't like Arc around a non-Send field.  But Mutex's access
+    // rules make it Send, which is why we need Arc instead of Rc.
+    #[allow(clippy::arc_with_non_send_sync)]
     pub fn new(t: T) -> Mutex<T> {
         let mutex_data = MutexData {
             owned: false,
