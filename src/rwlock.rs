@@ -270,6 +270,9 @@ impl<T: ?Sized> Clone for RwLock<T> {
 
 impl<T> RwLock<T> {
     /// Create a new `RwLock` in the unlocked state.
+    // Clippy doesn't like Arc around a non-Send field.  But Mutex's access
+    // rules make it Send, which is why we need Arc instead of Rc.
+    #[allow(clippy::arc_with_non_send_sync)]
     pub fn new(t: T) -> RwLock<T> {
         let lock_data = RwLockData {
             exclusive: false,
