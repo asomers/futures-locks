@@ -58,17 +58,9 @@ codecov_task:
   setup_script:
     - apt-get -y update
     - apt-get -y install libcurl4-openssl-dev libelf-dev libdw-dev cmake gcc binutils-dev libiberty-dev python-is-python3
-    - cargo install cargo-kcov
-    - |
-      if [ ! -x $HOME/.cargo/bin/kcov ] || [ ! -f $HOME/.cargo/bin/kcov ]; then
-        mkdir kcov
-        cd kcov
-        cargo kcov --print-install-kcov-sh | sh || exit 1
-        cd -
-        rm -rf kcov
-      fi
+    - cargo install cargo-llvm-cov
   codecov_script:
     - cargo check       # Ensure Cargo.lock exists
-    - cargo kcov --verbose -- --include-pattern='futures-locks/src'
+    - cargo llvm-cov --lcov --output-path lcov.info
     - bash <(curl -s https://codecov.io/bash)
   before_cache_script: rm -rf $CARGO_HOME/registry/index
