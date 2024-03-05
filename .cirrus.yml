@@ -33,6 +33,7 @@ test_task:
     - fi
   clippy_script:
     - if rustc --version | grep -q nightly; then
+    -   rustup component add clippy
     -   cargo clippy --all-features --all-targets
     - fi
   audit_script:
