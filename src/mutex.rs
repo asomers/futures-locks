@@ -4,7 +4,6 @@ use futures_channel::oneshot;
 use futures_task::{Context, Poll};
 use std::{
     cell::UnsafeCell,
-    clone::Clone,
     collections::VecDeque,
     future::Future,
     ops::{Deref, DerefMut},
