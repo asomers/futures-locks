@@ -503,7 +503,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// assert_eq!(r, 5);
     /// # }
     /// ```
-    #[cfg(any(feature = "tokio", all(docsrs, rustdoc)))]
+    #[cfg(any(feature = "tokio", docsrs))]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
     pub fn with_read<B, F, R>(&self, f: F)
         -> impl Future<Output = R>
@@ -543,7 +543,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// assert_eq!(r, 5);
     /// # }
     /// ```
-    #[cfg(any(feature = "tokio", all(docsrs, rustdoc)))]
+    #[cfg(any(feature = "tokio", docsrs))]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
     pub fn with_read_local<B, F, R>(&self, f: F)
         -> impl Future<Output = R>
@@ -593,7 +593,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// assert_eq!(rwlock.try_unwrap().unwrap(), 5);
     /// # }
     /// ```
-    #[cfg(any(feature = "tokio", all(docsrs, rustdoc)))]
+    #[cfg(any(feature = "tokio", docsrs))]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
     pub fn with_write<B, F, R>(&self, f: F)
         -> impl Future<Output = R>
@@ -634,7 +634,7 @@ impl<T: 'static + ?Sized> RwLock<T> {
     /// assert_eq!(*rwlock.try_unwrap().unwrap(), 5);
     /// # }
     /// ```
-    #[cfg(any(feature = "tokio", all(docsrs, rustdoc)))]
+    #[cfg(any(feature = "tokio", docsrs))]
     #[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
     pub fn with_write_local<B, F, R>(&self, f: F)
         -> impl Future<Output = R>
