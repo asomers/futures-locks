@@ -666,13 +666,6 @@ unsafe impl<T: ?Sized + Send + Sync> Sync for RwLock<T> {}
 mod t {
     use super::*;
 
-    /// Pet Kcov
-    #[test]
-    fn debug() {
-        let m = RwLock::<u32>::new(0);
-        format!("{:?}", &m);
-    }
-
     #[test]
     fn test_default() {
         let lock = RwLock::default();
