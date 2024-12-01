@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 This project adheres to [Semantic Versioning](http://semver.org/).
 
+## [Unreleased] - ReleaseDate
+
+### Changed
+
+- MSRV has been raised to 1.65.0, due to the futures-util crate yanking all
+  versions compatible with older compilers.
+  ([#61](https://github.com/asomers/futures-locks/pull/61))
+
 ## [0.7.1] - 2022-12-07
 
 - The published package on crates.io now includes functional tests.  No
