@@ -440,13 +440,6 @@ unsafe impl<T: ?Sized + Send> Sync for Mutex<T> {}
 mod t {
     use super::*;
 
-    /// Pet Kcov
-    #[test]
-    fn debug() {
-        let m = Mutex::<u32>::new(0);
-        format!("{:?}", &m);
-    }
-
     #[test]
     fn test_default() {
         let m = Mutex::default();
