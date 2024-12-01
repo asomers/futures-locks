@@ -4,7 +4,7 @@ test_task:
     RUSTDOCFLAGS: -D warnings
   matrix:
     - container:
-       image: rust:1.49.0
+       image: rust:1.65.0
     - container:
        image: rust:latest
     - container:
@@ -12,7 +12,7 @@ test_task:
   cargo_cache:
     folder: $CARGO_HOME/registry
   build_script:
-    - if rustc --version | grep -q 1.49.0; then
+    - if rustc --version | grep -q 1.65.0; then
     -   cp Cargo.lock.msrv Cargo.lock
     - fi
     - if rustc --version | grep -q nightly; then
@@ -43,7 +43,7 @@ test_task:
     - fi
   minver_script:
     - if rustc --version | grep -q nightly; then
-    -   cargo update -Zdirect-minimal-versions
+    -   cargo update -Zminimal-versions
     -   cargo check --all-targets
     - fi
   before_cache_script: rm -rf $CARGO_HOME/registry/index

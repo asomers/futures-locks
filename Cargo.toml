@@ -13,6 +13,7 @@ categories = ["asynchronous"]
 documentation = "https://docs.rs/futures-locks"
 autotests = false
 include = ["src/**/*", "tests/**/*", "LICENSE-*", "README.md", "CHANGELOG.md"]
+rust-version = "1.65"
 
 [package.metadata.docs.rs]
 features = ["tokio"]
@@ -30,7 +31,7 @@ tokio = { version = "1.2", features = ["rt"], optional = true }
 [dev-dependencies]
 futures = "0.3.11"
 tokio = { version = "1.2", features = ["sync", "macros", "rt-multi-thread"] }
-tokio-test = { version = "0.4.2" }
+tokio-test = { version = "0.4.3" }
 
 [[test]]
 name = "functional"
