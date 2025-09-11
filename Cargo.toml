@@ -24,8 +24,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 default = ["tokio"]
 
 [dependencies]
-futures-channel = "0.3.11"
-futures-task = "0.3.11"
+futures-channel = "0.3.31"
+futures-task = "0.3.31"
 tokio = { version = "1.2", features = ["rt"], optional = true }
 
 [dev-dependencies]
