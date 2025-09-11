@@ -43,7 +43,7 @@ test_task:
     - fi
   minver_script:
     - if rustc --version | grep -q nightly; then
-    -   cargo update -Zminimal-versions
+    -   cargo update -Zdirect-minimal-versions
     -   cargo check --all-targets
     - fi
   before_cache_script: rm -rf $CARGO_HOME/registry/index
