@@ -4,7 +4,7 @@ A library of [Futures]-aware locking primitives.  These locks can safely be used
 in asynchronous environments like [Tokio].  When they block, they'll only block
 a single task, not the entire reactor.
 
-[![Build Status](https://api.cirrus-ci.com/github/asomers/futures-locks.svg)](https://cirrus-ci.com/github/asomers/futures-locks)
+[![Build Status](https://github.com/asomers/futures-locks/actions/workflows/ci.yml/badge.svg)](https://github.com/asomers/futures-locks/actions/workflows/ci.yml)
 [![CodeCov.io](https://codecov.io/gh/asomers/futures-locks/branch/master/graph/badge.svg)](https://codecov.io/gh/asomers/futures-locks)
 
 [Futures]: https://github.com/rust-lang-nursery/futures-rs
