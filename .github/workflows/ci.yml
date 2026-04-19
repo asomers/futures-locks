@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rust_version: "1.65.0"
+          - rust_version: "stable"
+          - rust_version: "nightly"
+    name: ${{ matrix.rust_version }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust_version }}
+      - name: Setup
+        run: |
+          if [ "${{ matrix.rust_version }}" = "1.65.0" ]; then
+            cp Cargo.lock.msrv Cargo.lock
+          fi
+      - name: Build
+        run: |
+          if [ "${{ matrix.rust_version }}" = "nightly" ]; then
+            cargo build --all-targets
+          else
+            cargo build
+          fi
+      - name: Test
+        run: |
+          if [ "${{ matrix.rust_version }}" = "nightly" ]; then
+            cargo test --all-targets
+          else
+            cargo test
+          fi
+      - name: Test no default features
+        run: cargo test --no-default-features
+      - name: Doc
+        if: matrix.rust_version == 'nightly'
+        run: cargo doc --all-features --no-deps
+      - name: Clippy
+        if: matrix.rust_version == 'nightly'
+        run: |
+          rustup component add clippy
+          cargo clippy --all-features --all-targets
+      - name: Audit
+        if: matrix.rust_version == 'nightly'
+        run: cargo install cargo-audit && cargo audit
+      - name: Minver
+        if: matrix.rust_version == 'nightly'
+        run: |
+          cargo update -Zdirect-minimal-versions
+          cargo check --all-targets
+
+  codecov:
+    runs-on: ubuntu-latest
+    name: codecov
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcurl4-openssl-dev libelf-dev libdw-dev cmake gcc binutils-dev libiberty-dev python3
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov
+      - name: Generate coverage
+        env:
+          RUSTFLAGS: "-C link-dead-code"
+        run: |
+          cargo check
+          cargo llvm-cov --lcov --output-path lcov.info
+      - name: Upload to codecov
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        run: bash <(curl -s https://codecov.io/bash)
